@@ -41,7 +41,7 @@ const SermonSection = ({
               onClick={() => setSelectedCategory('All')}
               className={selectedCategory === 'All' 
                 ? 'bg-bible-gold text-bible-navy hover:bg-bible-gold/80' 
-                : 'border-white/30 text-white hover:bg-white/20'
+                : 'border-white/30 text-white bg-white/10 hover:bg-white/20'
               }
             >
               All Sermons
@@ -53,7 +53,7 @@ const SermonSection = ({
                 onClick={() => setSelectedCategory(category)}
                 className={selectedCategory === category 
                   ? 'bg-bible-gold text-bible-navy hover:bg-bible-gold/80' 
-                  : 'border-white/30 text-white hover:bg-white/20'
+                  : 'border-white/30 text-white bg-white/10 hover:bg-white/20'
                 }
               >
                 {category}
