@@ -50,16 +50,31 @@ const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(
       );
     }
 
+    // Audio-only player with controls disabled to prevent copying links
+    const audioOnlyEmbedUrl = `${embedUrl}&controls=1&disablekb=1&fs=0&modestbranding=1&rel=0&showinfo=0`;
+
     return (
-      <div className="relative aspect-video rounded-lg overflow-hidden">
-        <iframe
-          ref={iframeRef}
-          src={embedUrl}
-          title={title}
-          className="w-full h-full"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-        />
+      <div className="relative bg-gray-900 rounded-lg overflow-hidden">
+        {/* Audio-only interface - no video visible */}
+        <div className="h-32 bg-gradient-to-r from-bible-purple to-bible-navy flex items-center justify-center">
+          <div className="text-center text-white">
+            <div className="text-2xl mb-2">🎵</div>
+            <p className="text-sm font-medium">Audio Playing: {title}</p>
+            <p className="text-xs text-white/60 mt-1">Audio Only Mode</p>
+          </div>
+        </div>
+        
+        {/* Hidden iframe for audio playback */}
+        <div className="absolute top-0 left-0 w-full h-0 overflow-hidden opacity-0 pointer-events-none">
+          <iframe
+            ref={iframeRef}
+            src={audioOnlyEmbedUrl}
+            title={title}
+            className="w-full h-96"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            style={{ pointerEvents: 'none' }}
+          />
+        </div>
       </div>
     );
   }
