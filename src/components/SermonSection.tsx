@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Heart, ExternalLink, FileText } from "lucide-react";
 import { Sermon } from '@/pages/Index';
+import AudioPlayer from './AudioPlayer';
 
 interface SermonSectionProps {
   sermons: Sermon[];
@@ -39,9 +40,12 @@ const SermonSection = ({
   };
 
   const handleSermonSelect = (sermon: Sermon) => {
-    onSelectSermon(sermon);
-    // Scroll to top to show the audio player
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (currentSermon?.id === sermon.id) {
+      // If clicking the same sermon, deselect it
+      onSelectSermon(null);
+    } else {
+      onSelectSermon(sermon);
+    }
   };
 
   return (
@@ -81,86 +85,97 @@ const SermonSection = ({
           {/* Sermons Grid */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filteredSermons.map(sermon => (
-              <Card 
-                key={sermon.id} 
-                className={`bg-white/10 border-white/20 hover:bg-white/20 transition-all cursor-pointer ${
-                  currentSermon?.id === sermon.id ? 'ring-2 ring-bible-gold bg-white/20 scale-105' : ''
-                }`}
-                onClick={() => handleSermonSelect(sermon)}
-              >
-                <CardHeader className="pb-3">
-                  <div className="flex justify-between items-start">
-                    <CardTitle className="text-lg font-bible text-white line-clamp-2">
-                      {sermon.title}
-                    </CardTitle>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onLikeSermon(sermon.id);
-                      }}
-                      className="text-white hover:bg-white/20 p-1"
-                    >
-                      <Heart 
-                        className={`h-5 w-5 ${sermon.liked ? 'fill-red-500 text-red-500' : ''}`} 
-                      />
-                      <span className="ml-1 text-sm">{sermon.likes}</span>
-                    </Button>
-                  </div>
-                  <div className="flex gap-2 flex-wrap">
-                    <Badge variant="secondary" className="bg-bible-purple/20 text-white">
-                      {sermon.category}
-                    </Badge>
-                    <Badge variant="outline" className="border-white/30 text-white">
-                      {new Date(sermon.sermon_date).toLocaleDateString()}
-                    </Badge>
-                    {sermon.audio_drive_url && (
-                      <Badge variant="outline" className="border-green-400/50 text-green-300">
-                        Drive Audio
+              <div key={sermon.id} className="space-y-4">
+                <Card 
+                  className={`bg-white/10 border-white/20 hover:bg-white/20 transition-all cursor-pointer ${
+                    currentSermon?.id === sermon.id ? 'ring-2 ring-bible-gold bg-white/20' : ''
+                  }`}
+                  onClick={() => handleSermonSelect(sermon)}
+                >
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start">
+                      <CardTitle className="text-lg font-bible text-white line-clamp-2">
+                        {sermon.title}
+                      </CardTitle>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onLikeSermon(sermon.id);
+                        }}
+                        className="text-white hover:bg-white/20 p-1"
+                      >
+                        <Heart 
+                          className={`h-5 w-5 ${sermon.liked ? 'fill-red-500 text-red-500' : ''}`} 
+                        />
+                        <span className="ml-1 text-sm">{sermon.likes}</span>
+                      </Button>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      <Badge variant="secondary" className="bg-bible-purple/20 text-white">
+                        {sermon.category}
                       </Badge>
-                    )}
-                    {sermon.youtube_url && (
-                      <Badge variant="outline" className="border-red-400/50 text-red-300">
-                        YouTube
+                      <Badge variant="outline" className="border-white/30 text-white">
+                        {new Date(sermon.sermon_date).toLocaleDateString()}
                       </Badge>
-                    )}
-                    {sermon.gdoc_summary_url && (
-                      <Badge variant="outline" className="border-yellow-400/50 text-yellow-300">
-                        <FileText className="h-3 w-3 mr-1" />
-                        Summary
-                      </Badge>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-white/80 text-sm line-clamp-3">
-                    {sermon.description}
-                  </p>
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-bible-gold">Bible References:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {sermon.bible_references?.map((ref, index) => (
-                        <Badge 
-                          key={index} 
-                          variant="outline" 
-                          className="text-xs border-bible-gold/50 text-bible-gold"
-                        >
-                          {ref}
+                      {sermon.audio_drive_url && (
+                        <Badge variant="outline" className="border-green-400/50 text-green-300">
+                          Drive Audio
                         </Badge>
-                      ))}
+                      )}
+                      {sermon.youtube_url && (
+                        <Badge variant="outline" className="border-red-400/50 text-red-300">
+                          YouTube
+                        </Badge>
+                      )}
+                      {sermon.gdoc_summary_url && (
+                        <Badge variant="outline" className="border-yellow-400/50 text-yellow-300">
+                          <FileText className="h-3 w-3 mr-1" />
+                          Summary
+                        </Badge>
+                      )}
                     </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-white/80 text-sm line-clamp-3">
+                      {sermon.description}
+                    </p>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-bible-gold">Bible References:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {sermon.bible_references?.map((ref, index) => (
+                          <Badge 
+                            key={index} 
+                            variant="outline" 
+                            className="text-xs border-bible-gold/50 text-bible-gold"
+                          >
+                            {ref}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    {currentSermon?.id === sermon.id && (
+                      <div className="mt-3 p-2 bg-bible-gold/20 rounded-lg">
+                        <p className="text-bible-gold text-xs font-semibold text-center">
+                          🎵 Audio Player Below
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Audio Player Inline */}
+                {currentSermon?.id === sermon.id && (
+                  <div className="animate-fade-in">
+                    <AudioPlayer 
+                      sermon={currentSermon}
+                      onLike={() => onLikeSermon(currentSermon.id)}
+                    />
                   </div>
-                  
-                  {currentSermon?.id === sermon.id && (
-                    <div className="mt-3 p-2 bg-bible-gold/20 rounded-lg">
-                      <p className="text-bible-gold text-xs font-semibold text-center">
-                        ▶ Now Playing
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                )}
+              </div>
             ))}
           </div>
 

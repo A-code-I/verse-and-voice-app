@@ -13,8 +13,9 @@ import LoginPage from '@/components/LoginPage';
 import ProtectedContent from '@/components/ProtectedContent';
 import UserManagement from '@/components/UserManagement';
 import DailyDevotional from '@/components/DailyDevotional';
+import DevotionalManagement from '@/components/DevotionalManagement';
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Users, BookOpen } from "lucide-react";
+import { LogOut, Users, BookOpen, Calendar } from "lucide-react";
 
 export interface Sermon {
   id: string;
@@ -47,6 +48,7 @@ const Index = () => {
   const [showAdmin, setShowAdmin] = useState(false);
   const [showUserManagement, setShowUserManagement] = useState(false);
   const [showDevotional, setShowDevotional] = useState(false);
+  const [showDevotionalManagement, setShowDevotionalManagement] = useState(false);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string>('');
   const { toast } = useToast();
@@ -221,6 +223,7 @@ const Index = () => {
       setShowAdmin(false);
       setShowUserManagement(false);
       setShowDevotional(false);
+      setShowDevotionalManagement(false);
       toast({
         title: "Logged out",
         description: "You have been successfully logged out.",
@@ -261,6 +264,13 @@ const Index = () => {
     } catch (error) {
       console.error('Error toggling like:', error);
     }
+  };
+
+  const resetNavigation = () => {
+    setShowAdmin(false);
+    setShowUserManagement(false);
+    setShowDevotional(false);
+    setShowDevotionalManagement(false);
   };
 
   if (loading) {
@@ -325,12 +335,10 @@ const Index = () => {
           <div className="flex justify-center gap-4 flex-wrap">
             <Button 
               onClick={() => {
-                setShowAdmin(false);
-                setShowUserManagement(false);
-                setShowDevotional(false);
+                resetNavigation();
               }}
-              variant={!showAdmin && !showUserManagement && !showDevotional ? "default" : "outline"}
-              className={!showAdmin && !showUserManagement && !showDevotional
+              variant={!showAdmin && !showUserManagement && !showDevotional && !showDevotionalManagement ? "default" : "outline"}
+              className={!showAdmin && !showUserManagement && !showDevotional && !showDevotionalManagement
                 ? "bg-bible-gold text-bible-navy hover:bg-bible-gold/80" 
                 : "bg-white/20 border-white/30 text-white hover:bg-white/30"
               }
@@ -339,7 +347,10 @@ const Index = () => {
             </Button>
             
             <Button 
-              onClick={() => setShowDevotional(!showDevotional)}
+              onClick={() => {
+                resetNavigation();
+                setShowDevotional(true);
+              }}
               variant={showDevotional ? "default" : "outline"}
               className={showDevotional
                 ? "bg-bible-gold text-bible-navy hover:bg-bible-gold/80" 
@@ -354,9 +365,8 @@ const Index = () => {
               <>
                 <Button 
                   onClick={() => {
-                    setShowAdmin(!showAdmin);
-                    setShowUserManagement(false);
-                    setShowDevotional(false);
+                    resetNavigation();
+                    setShowAdmin(true);
                   }}
                   variant={showAdmin ? "default" : "outline"}
                   className={showAdmin
@@ -369,9 +379,8 @@ const Index = () => {
                 
                 <Button 
                   onClick={() => {
-                    setShowUserManagement(!showUserManagement);
-                    setShowAdmin(false);
-                    setShowDevotional(false);
+                    resetNavigation();
+                    setShowUserManagement(true);
                   }}
                   variant={showUserManagement ? "default" : "outline"}
                   className={showUserManagement
@@ -382,13 +391,30 @@ const Index = () => {
                   <Users className="h-4 w-4 mr-2" />
                   Users
                 </Button>
+
+                <Button 
+                  onClick={() => {
+                    resetNavigation();
+                    setShowDevotionalManagement(true);
+                  }}
+                  variant={showDevotionalManagement ? "default" : "outline"}
+                  className={showDevotionalManagement
+                    ? "bg-bible-gold text-bible-navy hover:bg-bible-gold/80" 
+                    : "bg-white/20 border-white/30 text-white hover:bg-white/30"
+                  }
+                >
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Manage Devotionals
+                </Button>
               </>
             )}
           </div>
         </header>
 
         {/* Content Sections */}
-        {showDevotional ? (
+        {showDevotionalManagement && userProfile?.role === 'admin' ? (
+          <DevotionalManagement />
+        ) : showDevotional ? (
           <DailyDevotional />
         ) : showUserManagement && userProfile?.role === 'admin' ? (
           <UserManagement />
@@ -401,16 +427,6 @@ const Index = () => {
           <div className="grid gap-8">
             {/* Daily Verse */}
             <DailyVerse />
-
-            {/* Audio Player */}
-            {currentSermon && (
-              <div className="animate-fade-in">
-                <AudioPlayer 
-                  sermon={currentSermon}
-                  onLike={() => handleLikeSermon(currentSermon.id)}
-                />
-              </div>
-            )}
 
             {/* Sermon Categories */}
             <SermonSection 

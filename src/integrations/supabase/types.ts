@@ -9,6 +9,39 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      devotionals: {
+        Row: {
+          bible_references: string[]
+          content: string
+          created_at: string
+          devotional_date: string
+          id: string
+          title: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          bible_references?: string[]
+          content: string
+          created_at?: string
+          devotional_date?: string
+          id?: string
+          title: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          bible_references?: string[]
+          content?: string
+          created_at?: string
+          devotional_date?: string
+          id?: string
+          title?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -38,10 +71,12 @@ export type Database = {
       }
       sermons: {
         Row: {
+          audio_drive_url: string | null
           bible_references: string[] | null
           category: string
           created_at: string
           description: string | null
+          gdoc_summary_url: string | null
           id: string
           likes: number
           sermon_date: string
@@ -50,10 +85,12 @@ export type Database = {
           youtube_url: string
         }
         Insert: {
+          audio_drive_url?: string | null
           bible_references?: string[] | null
           category: string
           created_at?: string
           description?: string | null
+          gdoc_summary_url?: string | null
           id?: string
           likes?: number
           sermon_date: string
@@ -62,10 +99,12 @@ export type Database = {
           youtube_url: string
         }
         Update: {
+          audio_drive_url?: string | null
           bible_references?: string[] | null
           category?: string
           created_at?: string
           description?: string | null
+          gdoc_summary_url?: string | null
           id?: string
           likes?: number
           sermon_date?: string
@@ -109,7 +148,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_admin: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
