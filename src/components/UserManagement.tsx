@@ -1,39 +1,135 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { UserPlus, UserMinus, Shield } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { UserPlus, UserMinus, Shield, Mail } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface User {
   id: string;
   email: string;
-  hasAccess: boolean;
-  isAdmin: boolean;
-  createdAt: string;
+  role: string;
+  has_access: boolean;
+  created_at: string;
 }
 
-interface UserManagementProps {
-  users: User[];
-  onToggleAccess: (userId: string) => void;
-  onToggleAdmin: (userId: string) => void;
-  onInviteUser: (email: string) => void;
-}
-
-const UserManagement = ({ 
-  users, 
-  onToggleAccess, 
-  onToggleAdmin, 
-  onInviteUser 
-}: UserManagementProps) => {
+const UserManagement = () => {
+  const [users, setUsers] = useState<User[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('user');
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
 
-  const handleInvite = (e: React.FormEvent) => {
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setUsers(data || []);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    }
+  };
+
+  const handleInviteUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (inviteEmail.trim()) {
-      onInviteUser(inviteEmail.trim());
+    if (!inviteEmail.trim()) return;
+
+    setLoading(true);
+    try {
+      // In a real app, you'd send an invitation email
+      // For now, we'll create a placeholder entry that gets updated when they sign up
+      const { error } = await supabase
+        .from('profiles')
+        .insert([{
+          email: inviteEmail.trim(),
+          role: inviteRole,
+          has_access: inviteRole === 'admin' ? true : false
+        }]);
+
+      if (error) throw error;
+
+      toast({
+        title: "User invited",
+        description: `Invitation sent to ${inviteEmail}. They can now sign up with this email.`,
+      });
+
       setInviteEmail('');
+      setInviteRole('user');
+      fetchUsers();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleUserAccess = async (userId: string, currentAccess: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ has_access: !currentAccess })
+        .eq('id', userId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Access updated",
+        description: `User access has been ${!currentAccess ? 'granted' : 'revoked'}.`,
+      });
+
+      fetchUsers();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const toggleUserRole = async (userId: string, currentRole: string) => {
+    const newRole = currentRole === 'admin' ? 'user' : 'admin';
+    const newAccess = newRole === 'admin' ? true : users.find(u => u.id === userId)?.has_access;
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          role: newRole,
+          has_access: newAccess
+        })
+        .eq('id', userId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Role updated",
+        description: `User role changed to ${newRole}.`,
+      });
+
+      fetchUsers();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -48,20 +144,37 @@ const UserManagement = ({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleInvite} className="flex gap-4">
-            <Input
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="Enter email address"
-              className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
-              required
-            />
+          <form onSubmit={handleInviteUser} className="space-y-4">
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="md:col-span-2">
+                <Input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="Enter email address"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                  required
+                />
+              </div>
+              <div>
+                <Select value={inviteRole} onValueChange={setInviteRole}>
+                  <SelectTrigger className="bg-white/10 border-white/20 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="user">User</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <Button 
               type="submit"
+              disabled={loading}
               className="bg-bible-gold hover:bg-bible-gold/80 text-bible-navy font-semibold"
             >
-              Send Invite
+              <Mail className="h-4 w-4 mr-2" />
+              {loading ? 'Inviting...' : 'Send Invite'}
             </Button>
           </form>
         </CardContent>
@@ -84,12 +197,12 @@ const UserManagement = ({
                     <h3 className="font-semibold text-lg">{user.email}</h3>
                     <div className="flex gap-2 mt-1">
                       <Badge 
-                        variant={user.hasAccess ? "default" : "secondary"}
-                        className={user.hasAccess ? "bg-green-600" : "bg-gray-600"}
+                        variant={user.has_access ? "default" : "secondary"}
+                        className={user.has_access ? "bg-green-600" : "bg-gray-600"}
                       >
-                        {user.hasAccess ? 'Has Access' : 'No Access'}
+                        {user.has_access ? 'Has Access' : 'No Access'}
                       </Badge>
-                      {user.isAdmin && (
+                      {user.role === 'admin' && (
                         <Badge variant="outline" className="border-bible-gold text-bible-gold">
                           <Shield className="h-3 w-3 mr-1" />
                           Admin
@@ -97,18 +210,18 @@ const UserManagement = ({
                       )}
                     </div>
                     <p className="text-white/60 text-sm mt-1">
-                      Joined: {new Date(user.createdAt).toLocaleDateString()}
+                      Joined: {new Date(user.created_at).toLocaleDateString()}
                     </p>
                   </div>
                   
                   <div className="flex gap-2">
                     <Button 
-                      onClick={() => onToggleAccess(user.id)}
-                      variant={user.hasAccess ? "destructive" : "default"}
+                      onClick={() => toggleUserAccess(user.id, user.has_access)}
+                      variant={user.has_access ? "destructive" : "default"}
                       size="sm"
-                      className={user.hasAccess ? "" : "bg-green-600 hover:bg-green-700"}
+                      className={user.has_access ? "" : "bg-green-600 hover:bg-green-700"}
                     >
-                      {user.hasAccess ? (
+                      {user.has_access ? (
                         <>
                           <UserMinus className="h-4 w-4 mr-1" />
                           Remove Access
@@ -122,12 +235,13 @@ const UserManagement = ({
                     </Button>
                     
                     <Button 
-                      onClick={() => onToggleAdmin(user.id)}
+                      onClick={() => toggleUserRole(user.id, user.role)}
                       variant="outline"
                       size="sm"
                       className="border-white/30 text-white hover:bg-white/20"
                     >
-                      {user.isAdmin ? 'Remove Admin' : 'Make Admin'}
+                      <Shield className="h-4 w-4 mr-1" />
+                      {user.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
                     </Button>
                   </div>
                 </div>

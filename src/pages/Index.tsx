@@ -4,63 +4,52 @@ import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
+import { User, Session } from '@supabase/supabase-js';
 import DailyVerse from '@/components/DailyVerse';
 import SermonSection from '@/components/SermonSection';
 import AudioPlayer from '@/components/AudioPlayer';
 import AdminPanel from '@/components/AdminPanel';
+import LoginPage from '@/components/LoginPage';
+import ProtectedContent from '@/components/ProtectedContent';
+import UserManagement from '@/components/UserManagement';
+import DailyDevotional from '@/components/DailyDevotional';
 import { useToast } from "@/hooks/use-toast";
+import { LogOut, Users, BookOpen } from "lucide-react";
 
 export interface Sermon {
   id: string;
   title: string;
   category: string;
-  youtubeUrl: string;
+  youtube_url?: string;
+  audio_drive_url?: string;
   description: string;
-  bibleReferences: string[];
-  date: string;
+  bible_references: string[];
+  sermon_date: string;
   likes: number;
-  liked: boolean;
+  liked?: boolean;
+  gdoc_summary_url?: string;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  role: string;
+  has_access: boolean;
+  created_at: string;
 }
 
 const Index = () => {
-  const [sermons, setSermons] = useState<Sermon[]>([
-    {
-      id: '1',
-      title: '08-06-2025 Sunday Service',
-      category: 'Sunday Service',
-      youtubeUrl: 'https://www.youtube.com/watch?v=01VYdtdhmSA',
-      description: 'A powerful message about trusting God in uncertain times and walking by faith, not by sight.',
-      bibleReferences: ['Hebrews 11:1', '2 Corinthians 5:7', 'Romans 10:17'],
-      date: '2024-06-08',
-      likes: 42,
-      liked: false
-    },
-    {
-      id: '2',
-      title: 'Praising GOD',
-      category: 'Sunday Service',
-      youtubeUrl: 'https://www.youtube.com/watch?v=OCcj7gUhM4E',
-      description: 'Understanding the importance of prayer in our daily Christian walk and how it transforms our hearts.',
-      bibleReferences: ['Matthew 6:9-13', '1 Thessalonians 5:18', 'James 5:16'],
-      date: '2024-06-22',
-      likes: 38,
-      liked: true
-    },
-    {
-      id: '3',
-      title: '27 - 04 - 2025 Sunday Service',
-      category: 'Sunday Service',
-      youtubeUrl: 'https://www.youtube.com/watch?v=xoITHGqJ_WM',
-      description: 'A call for spiritual awakening and renewal in our hearts and community.',
-      bibleReferences: ['2 Chronicles 7:14', 'Habakkuk 3:2', 'Acts 3:19'],
-      date: '2024-06-20',
-      likes: 67,
-      liked: false
-    }
-  ]);
-
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [sermons, setSermons] = useState<Sermon[]>([]);
   const [currentSermon, setCurrentSermon] = useState<Sermon | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showUserManagement, setShowUserManagement] = useState(false);
+  const [showDevotional, setShowDevotional] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string>('');
   const { toast } = useToast();
 
   const categories = [
@@ -76,92 +65,295 @@ const Index = () => {
     'Topic Wise'
   ];
 
-  const handleLikeSermon = (sermonId: string) => {
-    setSermons(prev => prev.map(sermon => 
-      sermon.id === sermonId 
-        ? { 
-            ...sermon, 
-            liked: !sermon.liked,
-            likes: sermon.liked ? sermon.likes - 1 : sermon.likes + 1
-          }
-        : sermon
-    ));
-    
-    const sermon = sermons.find(s => s.id === sermonId);
-    if (sermon) {
+  // Initialize auth
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          setTimeout(() => {
+            fetchUserProfile(session.user.id);
+          }, 0);
+        } else {
+          setUserProfile(null);
+        }
+      }
+    );
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchUserProfile(session.user.id);
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Fetch user profile
+  const fetchUserProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) throw error;
+      setUserProfile(data);
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+    }
+  };
+
+  // Fetch sermons
+  const fetchSermons = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('sermons')
+        .select('*')
+        .order('sermon_date', { ascending: false });
+
+      if (error) throw error;
+      setSermons(data || []);
+    } catch (error) {
+      console.error('Error fetching sermons:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (userProfile?.has_access) {
+      fetchSermons();
+    }
+  }, [userProfile]);
+
+  // Authentication functions
+  const handleLogin = async (email: string, password: string) => {
+    try {
+      setAuthError('');
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+      
       toast({
-        title: sermon.liked ? "Removed from favorites" : "Added to favorites",
-        description: `"${sermon.title}" ${sermon.liked ? 'removed from' : 'added to'} your favorites.`,
+        title: "Login successful",
+        description: "Welcome back!",
+      });
+    } catch (error: any) {
+      setAuthError(error.message);
+      toast({
+        title: "Login failed",
+        description: error.message,
+        variant: "destructive",
       });
     }
   };
 
-  const addSermon = (newSermon: Omit<Sermon, 'id' | 'likes' | 'liked'>) => {
-    const sermon: Sermon = {
-      ...newSermon,
-      id: Date.now().toString(),
-      likes: 0,
-      liked: false
-    };
-    setSermons(prev => [sermon, ...prev]);
-    toast({
-      title: "Sermon added successfully",
-      description: `"${sermon.title}" has been added to the collection.`,
-    });
-  };
+  const handleGoogleLogin = async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/`
+        }
+      });
 
-  const updateSermon = (id: string, updatedSermon: Omit<Sermon, 'id' | 'likes' | 'liked'>) => {
-    setSermons(prev => prev.map(sermon => 
-      sermon.id === id 
-        ? { ...sermon, ...updatedSermon }
-        : sermon
-    ));
-    toast({
-      title: "Sermon updated successfully",
-      description: "The sermon has been updated.",
-    });
-  };
-
-  const deleteSermon = (id: string) => {
-    setSermons(prev => prev.filter(sermon => sermon.id !== id));
-    if (currentSermon?.id === id) {
-      setCurrentSermon(null);
+      if (error) throw error;
+    } catch (error: any) {
+      setAuthError(error.message);
+      toast({
+        title: "Google login failed",
+        description: error.message,
+        variant: "destructive",
+      });
     }
-    toast({
-      title: "Sermon deleted",
-      description: "The sermon has been removed from the collection.",
-    });
   };
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setShowAdmin(false);
+      setShowUserManagement(false);
+      setShowDevotional(false);
+      toast({
+        title: "Logged out",
+        description: "You have been successfully logged out.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Sermon functions
+  const handleLikeSermon = async (sermondId: string) => {
+    if (!user) return;
+
+    try {
+      const { data: existingLike } = await supabase
+        .from('user_sermon_likes')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('sermon_id', sermondId)
+        .single();
+
+      if (existingLike) {
+        await supabase
+          .from('user_sermon_likes')
+          .delete()
+          .eq('id', existingLike.id);
+      } else {
+        await supabase
+          .from('user_sermon_likes')
+          .insert({ user_id: user.id, sermon_id: sermondId });
+      }
+
+      fetchSermons();
+    } catch (error) {
+      console.error('Error toggling like:', error);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen gradient-bg flex items-center justify-center">
+        <div className="text-white text-xl">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <LoginPage 
+        onLogin={handleLogin}
+        onGoogleLogin={handleGoogleLogin}
+        error={authError}
+      />
+    );
+  }
+
+  if (!userProfile?.has_access && userProfile?.role !== 'admin') {
+    return (
+      <ProtectedContent
+        isAuthenticated={!!user}
+        hasPermission={false}
+        onLogin={() => {}}
+      >
+        <div></div>
+      </ProtectedContent>
+    );
+  }
 
   return (
     <div className="min-h-screen gradient-bg">
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <header className="text-center mb-12">
-          <h1 className="text-5xl font-bible font-bold text-white mb-4 animate-fade-in">
-            Living Word Ministry
-          </h1>
-          <p className="text-xl text-white/80 animate-fade-in">
+          <div className="flex justify-between items-center mb-6">
+            <div></div>
+            <h1 className="text-5xl font-bible font-bold text-white animate-fade-in">
+              Living Word Ministry
+            </h1>
+            <div className="flex gap-2">
+              <Button 
+                onClick={handleLogout}
+                variant="outline"
+                className="bg-white/20 border-white/30 text-white hover:bg-white/30"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            </div>
+          </div>
+          <p className="text-xl text-white/80 animate-fade-in mb-6">
             Feeding souls with God's eternal truth
           </p>
-          <div className="mt-6">
+          
+          {/* Navigation Buttons */}
+          <div className="flex justify-center gap-4 flex-wrap">
             <Button 
-              onClick={() => setShowAdmin(!showAdmin)}
-              variant="outline"
-              className="bg-white/20 border-white/30 text-white hover:bg-white/30"
+              onClick={() => {
+                setShowAdmin(false);
+                setShowUserManagement(false);
+                setShowDevotional(false);
+              }}
+              variant={!showAdmin && !showUserManagement && !showDevotional ? "default" : "outline"}
+              className={!showAdmin && !showUserManagement && !showDevotional
+                ? "bg-bible-gold text-bible-navy hover:bg-bible-gold/80" 
+                : "bg-white/20 border-white/30 text-white hover:bg-white/30"
+              }
             >
-              {showAdmin ? 'View Sermons' : 'Admin Panel'}
+              Sermons
             </Button>
+            
+            <Button 
+              onClick={() => setShowDevotional(!showDevotional)}
+              variant={showDevotional ? "default" : "outline"}
+              className={showDevotional
+                ? "bg-bible-gold text-bible-navy hover:bg-bible-gold/80" 
+                : "bg-white/20 border-white/30 text-white hover:bg-white/30"
+              }
+            >
+              <BookOpen className="h-4 w-4 mr-2" />
+              Daily Devotional
+            </Button>
+
+            {userProfile?.role === 'admin' && (
+              <>
+                <Button 
+                  onClick={() => {
+                    setShowAdmin(!showAdmin);
+                    setShowUserManagement(false);
+                    setShowDevotional(false);
+                  }}
+                  variant={showAdmin ? "default" : "outline"}
+                  className={showAdmin
+                    ? "bg-bible-gold text-bible-navy hover:bg-bible-gold/80" 
+                    : "bg-white/20 border-white/30 text-white hover:bg-white/30"
+                  }
+                >
+                  Admin Panel
+                </Button>
+                
+                <Button 
+                  onClick={() => {
+                    setShowUserManagement(!showUserManagement);
+                    setShowAdmin(false);
+                    setShowDevotional(false);
+                  }}
+                  variant={showUserManagement ? "default" : "outline"}
+                  className={showUserManagement
+                    ? "bg-bible-gold text-bible-navy hover:bg-bible-gold/80" 
+                    : "bg-white/20 border-white/30 text-white hover:bg-white/30"
+                  }
+                >
+                  <Users className="h-4 w-4 mr-2" />
+                  Users
+                </Button>
+              </>
+            )}
           </div>
         </header>
 
-        {showAdmin ? (
+        {/* Content Sections */}
+        {showDevotional ? (
+          <DailyDevotional />
+        ) : showUserManagement && userProfile?.role === 'admin' ? (
+          <UserManagement />
+        ) : showAdmin && userProfile?.role === 'admin' ? (
           <AdminPanel 
-            onAddSermon={addSermon}
-            onUpdateSermon={updateSermon}
-            onDeleteSermon={deleteSermon}
-            sermons={sermons}
             categories={categories}
+            onRefreshSermons={fetchSermons}
           />
         ) : (
           <div className="grid gap-8">

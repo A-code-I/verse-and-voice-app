@@ -1,9 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Heart } from "lucide-react";
+import { Heart, ExternalLink, FileText } from "lucide-react";
 import { Sermon } from '@/pages/Index';
 
 interface SermonSectionProps {
@@ -23,9 +23,26 @@ const SermonSection = ({
 }: SermonSectionProps) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
+  // Reset category selection when sermons change
+  useEffect(() => {
+    if (sermons.length === 0) {
+      setSelectedCategory('All');
+    }
+  }, [sermons]);
+
   const filteredSermons = selectedCategory === 'All' 
     ? sermons 
     : sermons.filter(sermon => sermon.category === selectedCategory);
+
+  const handleCategorySelect = (category: string) => {
+    setSelectedCategory(category);
+  };
+
+  const handleSermonSelect = (sermon: Sermon) => {
+    onSelectSermon(sermon);
+    // Scroll to top to show the audio player
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   return (
     <div className="space-y-6">
@@ -38,7 +55,7 @@ const SermonSection = ({
           <div className="flex flex-wrap gap-2 mb-6 justify-center">
             <Button
               variant={selectedCategory === 'All' ? 'default' : 'outline'}
-              onClick={() => setSelectedCategory('All')}
+              onClick={() => handleCategorySelect('All')}
               className={selectedCategory === 'All' 
                 ? 'bg-bible-gold text-bible-navy hover:bg-bible-gold/80' 
                 : 'border-white/30 text-white bg-white/10 hover:bg-white/20'
@@ -50,7 +67,7 @@ const SermonSection = ({
               <Button
                 key={category}
                 variant={selectedCategory === category ? 'default' : 'outline'}
-                onClick={() => setSelectedCategory(category)}
+                onClick={() => handleCategorySelect(category)}
                 className={selectedCategory === category 
                   ? 'bg-bible-gold text-bible-navy hover:bg-bible-gold/80' 
                   : 'border-white/30 text-white bg-white/10 hover:bg-white/20'
@@ -67,9 +84,9 @@ const SermonSection = ({
               <Card 
                 key={sermon.id} 
                 className={`bg-white/10 border-white/20 hover:bg-white/20 transition-all cursor-pointer ${
-                  currentSermon?.id === sermon.id ? 'ring-2 ring-bible-gold' : ''
+                  currentSermon?.id === sermon.id ? 'ring-2 ring-bible-gold bg-white/20 scale-105' : ''
                 }`}
-                onClick={() => onSelectSermon(sermon)}
+                onClick={() => handleSermonSelect(sermon)}
               >
                 <CardHeader className="pb-3">
                   <div className="flex justify-between items-start">
@@ -91,13 +108,29 @@ const SermonSection = ({
                       <span className="ml-1 text-sm">{sermon.likes}</span>
                     </Button>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <Badge variant="secondary" className="bg-bible-purple/20 text-white">
                       {sermon.category}
                     </Badge>
                     <Badge variant="outline" className="border-white/30 text-white">
-                      {new Date(sermon.date).toLocaleDateString()}
+                      {new Date(sermon.sermon_date).toLocaleDateString()}
                     </Badge>
+                    {sermon.audio_drive_url && (
+                      <Badge variant="outline" className="border-green-400/50 text-green-300">
+                        Drive Audio
+                      </Badge>
+                    )}
+                    {sermon.youtube_url && (
+                      <Badge variant="outline" className="border-red-400/50 text-red-300">
+                        YouTube
+                      </Badge>
+                    )}
+                    {sermon.gdoc_summary_url && (
+                      <Badge variant="outline" className="border-yellow-400/50 text-yellow-300">
+                        <FileText className="h-3 w-3 mr-1" />
+                        Summary
+                      </Badge>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -107,7 +140,7 @@ const SermonSection = ({
                   <div className="space-y-2">
                     <p className="text-xs font-semibold text-bible-gold">Bible References:</p>
                     <div className="flex flex-wrap gap-1">
-                      {sermon.bibleReferences.map((ref, index) => (
+                      {sermon.bible_references?.map((ref, index) => (
                         <Badge 
                           key={index} 
                           variant="outline" 
@@ -118,6 +151,14 @@ const SermonSection = ({
                       ))}
                     </div>
                   </div>
+                  
+                  {currentSermon?.id === sermon.id && (
+                    <div className="mt-3 p-2 bg-bible-gold/20 rounded-lg">
+                      <p className="text-bible-gold text-xs font-semibold text-center">
+                        ▶ Now Playing
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}

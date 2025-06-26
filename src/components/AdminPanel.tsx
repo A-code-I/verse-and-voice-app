@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -5,75 +6,157 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Trash2 } from "lucide-react";
-import { Sermon } from '@/pages/Index';
+import { Trash2, Plus, ExternalLink } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface AdminPanelProps {
-  onAddSermon: (sermon: Omit<Sermon, 'id' | 'likes' | 'liked'>) => void;
-  onUpdateSermon: (id: string, sermon: Omit<Sermon, 'id' | 'likes' | 'liked'>) => void;
-  onDeleteSermon: (id: string) => void;
-  sermons: Sermon[];
   categories: string[];
+  onRefreshSermons: () => void;
 }
 
-const AdminPanel = ({ 
-  onAddSermon, 
-  onUpdateSermon, 
-  onDeleteSermon, 
-  sermons, 
-  categories 
-}: AdminPanelProps) => {
+const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
   const [formData, setFormData] = useState({
     title: '',
     category: '',
-    youtubeUrl: '',
+    youtube_url: '',
+    audio_drive_url: '',
+    gdoc_summary_url: '',
     description: '',
-    bibleReferences: '',
-    date: new Date().toISOString().split('T')[0]
+    bible_references: '',
+    sermon_date: new Date().toISOString().split('T')[0]
   });
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [sermons, setSermons] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    const referencesArray = formData.bibleReferences
-      .split(',')
-      .map(ref => ref.trim())
-      .filter(ref => ref);
+  React.useEffect(() => {
+    fetchSermons();
+  }, []);
 
-    const sermonData = {
-      ...formData,
-      bibleReferences: referencesArray
-    };
+  const fetchSermons = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('sermons')
+        .select('*')
+        .order('sermon_date', { ascending: false });
 
-    if (editingId) {
-      onUpdateSermon(editingId, sermonData);
-      setEditingId(null);
-    } else {
-      onAddSermon(sermonData);
+      if (error) throw error;
+      setSermons(data || []);
+      onRefreshSermons();
+    } catch (error) {
+      console.error('Error fetching sermons:', error);
     }
-
-    // Reset form
-    setFormData({
-      title: '',
-      category: '',
-      youtubeUrl: '',
-      description: '',
-      bibleReferences: '',
-      date: new Date().toISOString().split('T')[0]
-    });
   };
 
-  const handleEdit = (sermon: Sermon) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    try {
+      const referencesArray = formData.bible_references
+        .split(',')
+        .map(ref => ref.trim())
+        .filter(ref => ref);
+
+      const sermonData = {
+        title: formData.title,
+        category: formData.category,
+        youtube_url: formData.youtube_url || null,
+        audio_drive_url: formData.audio_drive_url || null,
+        gdoc_summary_url: formData.gdoc_summary_url || null,
+        description: formData.description,
+        bible_references: referencesArray,
+        sermon_date: formData.sermon_date
+      };
+
+      if (editingId) {
+        const { error } = await supabase
+          .from('sermons')
+          .update(sermonData)
+          .eq('id', editingId);
+
+        if (error) throw error;
+        
+        toast({
+          title: "Sermon updated successfully",
+          description: "The sermon has been updated.",
+        });
+      } else {
+        const { error } = await supabase
+          .from('sermons')
+          .insert([sermonData]);
+
+        if (error) throw error;
+        
+        toast({
+          title: "Sermon added successfully",
+          description: `"${sermonData.title}" has been added to the collection.`,
+        });
+      }
+
+      // Reset form
+      setFormData({
+        title: '',
+        category: '',
+        youtube_url: '',
+        audio_drive_url: '',
+        gdoc_summary_url: '',
+        description: '',
+        bible_references: '',
+        sermon_date: new Date().toISOString().split('T')[0]
+      });
+      setEditingId(null);
+      fetchSermons();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEdit = (sermon: any) => {
     setFormData({
       title: sermon.title,
       category: sermon.category,
-      youtubeUrl: sermon.youtubeUrl,
-      description: sermon.description,
-      bibleReferences: sermon.bibleReferences.join(', '),
-      date: sermon.date
+      youtube_url: sermon.youtube_url || '',
+      audio_drive_url: sermon.audio_drive_url || '',
+      gdoc_summary_url: sermon.gdoc_summary_url || '',
+      description: sermon.description || '',
+      bible_references: sermon.bible_references?.join(', ') || '',
+      sermon_date: sermon.sermon_date
     });
     setEditingId(sermon.id);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this sermon?')) return;
+    
+    try {
+      const { error } = await supabase
+        .from('sermons')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      toast({
+        title: "Sermon deleted",
+        description: "The sermon has been removed from the collection.",
+      });
+      fetchSermons();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
   const cancelEdit = () => {
@@ -81,10 +164,12 @@ const AdminPanel = ({
     setFormData({
       title: '',
       category: '',
-      youtubeUrl: '',
+      youtube_url: '',
+      audio_drive_url: '',
+      gdoc_summary_url: '',
       description: '',
-      bibleReferences: '',
-      date: new Date().toISOString().split('T')[0]
+      bible_references: '',
+      sermon_date: new Date().toISOString().split('T')[0]
     });
   };
 
@@ -131,11 +216,10 @@ const AdminPanel = ({
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">YouTube URL</label>
+                <label className="block text-sm font-medium mb-2">YouTube URL (Optional)</label>
                 <Input
-                  value={formData.youtubeUrl}
-                  onChange={(e) => setFormData(prev => ({ ...prev, youtubeUrl: e.target.value }))}
-                  required
+                  value={formData.youtube_url}
+                  onChange={(e) => setFormData(prev => ({ ...prev, youtube_url: e.target.value }))}
                   type="url"
                   className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                   placeholder="https://www.youtube.com/watch?v=..."
@@ -143,10 +227,32 @@ const AdminPanel = ({
               </div>
 
               <div>
+                <label className="block text-sm font-medium mb-2">Audio Drive URL (Optional)</label>
+                <Input
+                  value={formData.audio_drive_url}
+                  onChange={(e) => setFormData(prev => ({ ...prev, audio_drive_url: e.target.value }))}
+                  type="url"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                  placeholder="https://drive.google.com/..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">G-Doc Summary URL (Optional)</label>
+                <Input
+                  value={formData.gdoc_summary_url}
+                  onChange={(e) => setFormData(prev => ({ ...prev, gdoc_summary_url: e.target.value }))}
+                  type="url"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                  placeholder="https://docs.google.com/..."
+                />
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium mb-2">Date</label>
                 <Input
-                  value={formData.date}
-                  onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+                  value={formData.sermon_date}
+                  onChange={(e) => setFormData(prev => ({ ...prev, sermon_date: e.target.value }))}
                   required
                   type="date"
                   className="bg-white/10 border-white/20 text-white"
@@ -171,8 +277,8 @@ const AdminPanel = ({
                 Bible References (comma separated)
               </label>
               <Input
-                value={formData.bibleReferences}
-                onChange={(e) => setFormData(prev => ({ ...prev, bibleReferences: e.target.value }))}
+                value={formData.bible_references}
+                onChange={(e) => setFormData(prev => ({ ...prev, bible_references: e.target.value }))}
                 className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                 placeholder="John 3:16, Romans 8:28, Psalm 23:1"
               />
@@ -181,9 +287,10 @@ const AdminPanel = ({
             <div className="flex gap-4">
               <Button 
                 type="submit" 
+                disabled={loading}
                 className="bg-bible-gold hover:bg-bible-gold/80 text-bible-navy font-semibold"
               >
-                {editingId ? 'Update Sermon' : 'Add Sermon'}
+                {loading ? 'Saving...' : (editingId ? 'Update Sermon' : 'Add Sermon')}
               </Button>
               {editingId && (
                 <Button 
@@ -213,15 +320,30 @@ const AdminPanel = ({
                 className="bg-white/10 rounded-lg p-4 border border-white/20"
               >
                 <div className="flex justify-between items-start mb-3">
-                  <div>
+                  <div className="flex-1">
                     <h3 className="font-semibold text-lg">{sermon.title}</h3>
-                    <div className="flex gap-2 mt-1">
+                    <div className="flex gap-2 mt-1 flex-wrap">
                       <Badge variant="secondary" className="bg-bible-purple/20 text-white">
                         {sermon.category}
                       </Badge>
                       <Badge variant="outline" className="border-white/30 text-white">
-                        {new Date(sermon.date).toLocaleDateString()}
+                        {new Date(sermon.sermon_date).toLocaleDateString()}
                       </Badge>
+                      {sermon.youtube_url && (
+                        <Badge variant="outline" className="border-blue-400/50 text-blue-300">
+                          YouTube
+                        </Badge>
+                      )}
+                      {sermon.audio_drive_url && (
+                        <Badge variant="outline" className="border-green-400/50 text-green-300">
+                          Audio Drive
+                        </Badge>
+                      )}
+                      {sermon.gdoc_summary_url && (
+                        <Badge variant="outline" className="border-yellow-400/50 text-yellow-300">
+                          Summary
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   <div className="flex gap-2">
@@ -234,7 +356,7 @@ const AdminPanel = ({
                       Edit
                     </Button>
                     <Button 
-                      onClick={() => onDeleteSermon(sermon.id)}
+                      onClick={() => handleDelete(sermon.id)}
                       variant="destructive"
                       size="sm"
                     >
@@ -245,17 +367,19 @@ const AdminPanel = ({
                 
                 <p className="text-white/80 text-sm mb-2">{sermon.description}</p>
                 
-                <div className="flex flex-wrap gap-1">
-                  {sermon.bibleReferences.map((ref, index) => (
-                    <Badge 
-                      key={index} 
-                      variant="outline" 
-                      className="text-xs border-bible-gold/50 text-bible-gold"
-                    >
-                      {ref}
-                    </Badge>
-                  ))}
-                </div>
+                {sermon.bible_references && (
+                  <div className="flex flex-wrap gap-1">
+                    {sermon.bible_references.map((ref: string, index: number) => (
+                      <Badge 
+                        key={index} 
+                        variant="outline" 
+                        className="text-xs border-bible-gold/50 text-bible-gold"
+                      >
+                        {ref}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

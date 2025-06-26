@@ -9,7 +9,101 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          has_access: boolean
+          id: string
+          role: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          has_access?: boolean
+          id: string
+          role?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          has_access?: boolean
+          id?: string
+          role?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      sermons: {
+        Row: {
+          bible_references: string[] | null
+          category: string
+          created_at: string
+          description: string | null
+          id: string
+          likes: number
+          sermon_date: string
+          title: string
+          updated_at: string
+          youtube_url: string
+        }
+        Insert: {
+          bible_references?: string[] | null
+          category: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          likes?: number
+          sermon_date: string
+          title: string
+          updated_at?: string
+          youtube_url: string
+        }
+        Update: {
+          bible_references?: string[] | null
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          likes?: number
+          sermon_date?: string
+          title?: string
+          updated_at?: string
+          youtube_url?: string
+        }
+        Relationships: []
+      }
+      user_sermon_likes: {
+        Row: {
+          created_at: string
+          id: string
+          sermon_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          sermon_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          sermon_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_sermon_likes_sermon_id_fkey"
+            columns: ["sermon_id"]
+            isOneToOne: false
+            referencedRelation: "sermons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
