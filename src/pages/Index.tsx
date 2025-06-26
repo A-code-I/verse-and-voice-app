@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -69,6 +68,7 @@ const Index = () => {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('Auth state changed:', event, session?.user?.email);
         setSession(session);
         setUser(session?.user ?? null);
         
@@ -83,6 +83,7 @@ const Index = () => {
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('Initial session:', session?.user?.email);
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -94,19 +95,57 @@ const Index = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch user profile
+  // Fetch user profile with better error handling
   const fetchUserProfile = async (userId: string) => {
     try {
+      console.log('Fetching profile for user:', userId);
+      
+      // First, try to get the profile directly
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching user profile:', error);
+        
+        // If profile doesn't exist, create one
+        if (error.code === 'PGRST116') {
+          console.log('Profile not found, creating new profile');
+          const { data: userData } = await supabase.auth.getUser();
+          if (userData.user) {
+            const { error: insertError } = await supabase
+              .from('profiles')
+              .insert({
+                id: userId,
+                email: userData.user.email,
+                role: 'user',
+                has_access: false
+              });
+            
+            if (!insertError) {
+              // Fetch the newly created profile
+              const { data: newProfile } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', userId)
+                .single();
+              
+              if (newProfile) {
+                setUserProfile(newProfile);
+                console.log('New profile created:', newProfile);
+              }
+            }
+          }
+        }
+        return;
+      }
+      
       setUserProfile(data);
+      console.log('User profile loaded:', data);
     } catch (error) {
-      console.error('Error fetching user profile:', error);
+      console.error('Error in fetchUserProfile:', error);
     }
   };
 
@@ -242,7 +281,10 @@ const Index = () => {
     );
   }
 
-  if (!userProfile?.has_access && userProfile?.role !== 'admin') {
+  // Check if user has access or is admin
+  const hasAccess = userProfile?.has_access || userProfile?.role === 'admin';
+
+  if (!hasAccess) {
     return (
       <ProtectedContent
         isAuthenticated={!!user}
