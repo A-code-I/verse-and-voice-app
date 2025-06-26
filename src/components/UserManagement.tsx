@@ -48,15 +48,18 @@ const UserManagement = () => {
 
     setLoading(true);
     try {
-      // In a real app, you'd send an invitation email
-      // For now, we'll create a placeholder entry that gets updated when they sign up
+      // Generate a temporary UUID for the invitation
+      const tempId = crypto.randomUUID();
+      
+      // Create a placeholder profile entry
       const { error } = await supabase
         .from('profiles')
-        .insert([{
+        .insert({
+          id: tempId,
           email: inviteEmail.trim(),
           role: inviteRole,
           has_access: inviteRole === 'admin' ? true : false
-        }]);
+        });
 
       if (error) throw error;
 
