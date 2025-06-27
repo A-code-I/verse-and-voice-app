@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, Calendar } from "lucide-react";
+import { Trash2, Calendar, Edit } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -30,6 +30,7 @@ const DevotionalManagement = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [devotionals, setDevotionals] = useState<Devotional[]>([]);
   const [loading, setLoading] = useState(false);
+  const [fetchLoading, setFetchLoading] = useState(true);
   const { toast } = useToast();
 
   const devotionalTypes = ['Faith is the Victor', 'Streams in the Desert'];
@@ -39,26 +40,45 @@ const DevotionalManagement = () => {
   }, []);
 
   const fetchDevotionals = async () => {
+    setFetchLoading(true);
     try {
+      console.log('Fetching devotionals...');
       const { data, error } = await supabase
         .from('devotionals')
         .select('*')
         .order('devotional_date', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching devotionals:', error);
+        throw error;
+      }
+      
+      console.log('Fetched devotionals:', data);
       setDevotionals(data || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching devotionals:', error);
       toast({
         title: "Error",
-        description: "Failed to fetch devotionals",
+        description: `Failed to fetch devotionals: ${error.message}`,
         variant: "destructive",
       });
+    } finally {
+      setFetchLoading(false);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!formData.title.trim() || !formData.content.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Title and content are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
     
     try {
@@ -68,12 +88,14 @@ const DevotionalManagement = () => {
         .filter(ref => ref);
 
       const devotionalData = {
-        title: formData.title,
+        title: formData.title.trim(),
         type: formData.type,
-        content: formData.content,
+        content: formData.content.trim(),
         bible_references: referencesArray,
         devotional_date: formData.devotional_date
       };
+
+      console.log('Submitting devotional data:', devotionalData);
 
       if (editingId) {
         const { error } = await supabase
@@ -81,22 +103,28 @@ const DevotionalManagement = () => {
           .update(devotionalData)
           .eq('id', editingId);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Update error:', error);
+          throw error;
+        }
         
         toast({
-          title: "Devotional updated successfully",
-          description: "The devotional has been updated.",
+          title: "Success",
+          description: "Devotional updated successfully",
         });
       } else {
         const { error } = await supabase
           .from('devotionals')
           .insert([devotionalData]);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Insert error:', error);
+          throw error;
+        }
         
         toast({
-          title: "Devotional added successfully",
-          description: `"${devotionalData.title}" has been added.`,
+          title: "Success",
+          description: `Devotional "${devotionalData.title}" has been added.`,
         });
       }
 
@@ -111,9 +139,10 @@ const DevotionalManagement = () => {
       setEditingId(null);
       fetchDevotionals();
     } catch (error: any) {
+      console.error('Submit error:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: `Failed to save devotional: ${error.message}`,
         variant: "destructive",
       });
     } finally {
@@ -122,6 +151,7 @@ const DevotionalManagement = () => {
   };
 
   const handleEdit = (devotional: Devotional) => {
+    console.log('Editing devotional:', devotional);
     setFormData({
       title: devotional.title,
       type: devotional.type,
@@ -132,26 +162,31 @@ const DevotionalManagement = () => {
     setEditingId(devotional.id);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this devotional?')) return;
+  const handleDelete = async (id: string, title: string) => {
+    if (!confirm(`Are you sure you want to delete "${title}"?`)) return;
     
     try {
+      console.log('Deleting devotional:', id);
       const { error } = await supabase
         .from('devotionals')
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Delete error:', error);
+        throw error;
+      }
       
       toast({
-        title: "Devotional deleted",
-        description: "The devotional has been removed.",
+        title: "Success",
+        description: "Devotional deleted successfully",
       });
       fetchDevotionals();
     } catch (error: any) {
+      console.error('Delete error:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: `Failed to delete devotional: ${error.message}`,
         variant: "destructive",
       });
     }
@@ -182,7 +217,7 @@ const DevotionalManagement = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-2">Title</label>
+                <label className="block text-sm font-medium mb-2">Title *</label>
                 <Input
                   value={formData.title}
                   onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
@@ -224,14 +259,14 @@ const DevotionalManagement = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">Content</label>
+              <label className="block text-sm font-medium mb-2">Content *</label>
               <Textarea
                 value={formData.content}
                 onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
                 required
                 className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                 placeholder="Enter devotional content"
-                rows={5}
+                rows={6}
               />
             </div>
 
@@ -273,70 +308,79 @@ const DevotionalManagement = () => {
       {/* Existing Devotionals */}
       <Card className="glass-effect border-white/20 text-white">
         <CardHeader>
-          <CardTitle className="text-2xl font-bible">Manage Daily Devotionals</CardTitle>
+          <CardTitle className="text-2xl font-bible">Manage Daily Devotionals ({devotionals.length} total)</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {devotionals.map(devotional => (
-              <div 
-                key={devotional.id} 
-                className="bg-white/10 rounded-lg p-4 border border-white/20"
-              >
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-lg">{devotional.title}</h3>
-                    <div className="flex gap-2 mt-1 flex-wrap">
-                      <Badge variant="secondary" className="bg-bible-purple/20 text-white">
-                        {devotional.type}
-                      </Badge>
-                      <Badge variant="outline" className="border-white/30 text-white">
-                        {new Date(devotional.devotional_date).toLocaleDateString()}
-                      </Badge>
+          {fetchLoading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-bible-gold mx-auto"></div>
+              <p className="text-white/60 mt-2">Loading devotionals...</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {devotionals.map(devotional => (
+                <div 
+                  key={devotional.id} 
+                  className="bg-white/10 rounded-lg p-4 border border-white/20 hover:bg-white/15 transition-colors"
+                >
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-lg text-white">{devotional.title}</h3>
+                      <div className="flex gap-2 mt-2 flex-wrap">
+                        <Badge variant="secondary" className="bg-bible-purple/20 text-white">
+                          {devotional.type}
+                        </Badge>
+                        <Badge variant="outline" className="border-white/30 text-white">
+                          {new Date(devotional.devotional_date).toLocaleDateString()}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button 
+                        onClick={() => handleEdit(devotional)}
+                        variant="outline"
+                        size="sm"
+                        className="border-white/30 text-white hover:bg-white/20"
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
+                      <Button 
+                        onClick={() => handleDelete(devotional.id, devotional.title)}
+                        variant="destructive"
+                        size="sm"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button 
-                      onClick={() => handleEdit(devotional)}
-                      variant="outline"
-                      size="sm"
-                      className="border-white/30 text-white hover:bg-white/20"
-                    >
-                      Edit
-                    </Button>
-                    <Button 
-                      onClick={() => handleDelete(devotional.id)}
-                      variant="destructive"
-                      size="sm"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  
+                  <p className="text-white/80 text-sm mb-3 line-clamp-3">{devotional.content}</p>
+                  
+                  {devotional.bible_references && devotional.bible_references.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {devotional.bible_references.map((ref: string, index: number) => (
+                        <Badge 
+                          key={index} 
+                          variant="outline" 
+                          className="text-xs border-bible-gold/50 text-bible-gold"
+                        >
+                          {ref}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                
-                <p className="text-white/80 text-sm mb-2 line-clamp-3">{devotional.content}</p>
-                
-                {devotional.bible_references && devotional.bible_references.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {devotional.bible_references.map((ref: string, index: number) => (
-                      <Badge 
-                        key={index} 
-                        variant="outline" 
-                        className="text-xs border-bible-gold/50 text-bible-gold"
-                      >
-                        {ref}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+              ))}
 
-            {devotionals.length === 0 && (
-              <div className="text-center py-12">
-                <p className="text-white/60 text-lg">No devotionals found. Add your first one above!</p>
-              </div>
-            )}
-          </div>
+              {devotionals.length === 0 && !fetchLoading && (
+                <div className="text-center py-12">
+                  <Calendar className="h-12 w-12 text-white/30 mx-auto mb-4" />
+                  <p className="text-white/60 text-lg">No devotionals found. Add your first one above!</p>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
