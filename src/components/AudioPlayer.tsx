@@ -21,17 +21,18 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   const [error, setError] = useState<string>('');
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // More flexible YouTube video ID extraction
+  // More flexible YouTube video ID extraction including live streams
   const getYouTubeVideoId = (url: string): string | null => {
     if (!url || typeof url !== 'string') return null;
     
-    // Handle various YouTube URL formats
+    // Handle various YouTube URL formats including live streams
     const patterns = [
       /(?:youtube\.com\/watch\?v=)([^&\n?#]+)/,
       /(?:youtube\.com\/embed\/)([^&\n?#]+)/,
       /(?:youtube\.com\/v\/)([^&\n?#]+)/,
       /(?:youtu\.be\/)([^&\n?#]+)/,
-      /(?:youtube\.com\/.*[?&]v=)([^&\n?#]+)/
+      /(?:youtube\.com\/.*[?&]v=)([^&\n?#]+)/,
+      /(?:youtube\.com\/live\/)([^&\n?#]+)/  // Added support for live streams
     ];
     
     for (const pattern of patterns) {
@@ -146,7 +147,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
           <p className="text-red-300 text-lg">Invalid YouTube URL</p>
           <p className="text-red-300/60 text-sm mt-2">Please check the YouTube link: {sermon.youtube_url}</p>
           <p className="text-red-300/40 text-xs mt-1">
-            Supported formats: youtube.com/watch?v=..., youtu.be/..., or video ID
+            Supported formats: youtube.com/watch?v=..., youtube.com/live/..., youtu.be/..., or video ID
           </p>
         </div>
       </div>
