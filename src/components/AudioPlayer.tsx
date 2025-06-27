@@ -21,11 +21,32 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   const [error, setError] = useState<string>('');
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // Extract YouTube video ID
+  // More flexible YouTube video ID extraction
   const getYouTubeVideoId = (url: string): string | null => {
-    const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-    const match = url.match(regex);
-    return match ? match[1] : null;
+    if (!url || typeof url !== 'string') return null;
+    
+    // Handle various YouTube URL formats
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=)([^&\n?#]+)/,
+      /(?:youtube\.com\/embed\/)([^&\n?#]+)/,
+      /(?:youtube\.com\/v\/)([^&\n?#]+)/,
+      /(?:youtu\.be\/)([^&\n?#]+)/,
+      /(?:youtube\.com\/.*[?&]v=)([^&\n?#]+)/
+    ];
+    
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1] && match[1].length === 11) {
+        return match[1];
+      }
+    }
+    
+    // If it looks like a video ID itself (11 characters)
+    if (url.length === 11 && /^[a-zA-Z0-9_-]+$/.test(url)) {
+      return url;
+    }
+    
+    return null;
   };
 
   const videoId = sermon.youtube_url ? getYouTubeVideoId(sermon.youtube_url) : null;
@@ -36,7 +57,32 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     setCurrentTime(0);
     setDuration(0);
     setError('');
+    setLoading(false);
   }, [sermon.id]);
+
+  // Listen for YouTube player events
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== 'https://www.youtube.com') return;
+      
+      try {
+        const data = JSON.parse(event.data);
+        if (data.event === 'video-progress') {
+          setCurrentTime(data.info.currentTime || 0);
+          setDuration(data.info.duration || 0);
+        } else if (data.event === 'onStateChange') {
+          // YouTube player state: -1 (unstarted), 0 (ended), 1 (playing), 2 (paused), 3 (buffering), 5 (cued)
+          setIsPlaying(data.info === 1);
+          setLoading(data.info === 3);
+        }
+      } catch (error) {
+        // Ignore parsing errors
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   const togglePlayPause = () => {
     if (!videoId || !iframeRef.current) {
@@ -44,7 +90,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       return;
     }
 
-    setLoading(true);
+    setError('');
     
     try {
       if (isPlaying) {
@@ -52,19 +98,15 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
           '{"event":"command","func":"pauseVideo","args":""}',
           '*'
         );
-        setIsPlaying(false);
       } else {
         iframeRef.current.contentWindow?.postMessage(
           '{"event":"command","func":"playVideo","args":""}',
           '*'
         );
-        setIsPlaying(true);
       }
     } catch (error) {
       console.error('Error controlling YouTube player:', error);
       setError('Failed to control playback');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -76,6 +118,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       `{"event":"command","func":"seekTo","args":[${newTime},true]}`,
       '*'
     );
+    setCurrentTime(newTime);
   };
 
   const handleSeek = (value: number[]) => {
@@ -90,37 +133,21 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   };
 
   const formatTime = (time: number) => {
+    if (!time || isNaN(time)) return '0:00';
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
-
-  // Listen for YouTube player events
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== 'https://www.youtube.com') return;
-      
-      try {
-        const data = JSON.parse(event.data);
-        if (data.event === 'video-progress') {
-          setCurrentTime(data.info.currentTime);
-          setDuration(data.info.duration);
-        }
-      } catch (error) {
-        // Ignore parsing errors
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, []);
 
   if (!videoId) {
     return (
       <div className="bg-gradient-to-r from-bible-purple/20 to-bible-navy/20 rounded-lg p-4 border border-bible-gold/30">
         <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-6 text-center">
           <p className="text-red-300 text-lg">Invalid YouTube URL</p>
-          <p className="text-red-300/60 text-sm mt-2">Please check the YouTube link in the admin panel</p>
+          <p className="text-red-300/60 text-sm mt-2">Please check the YouTube link: {sermon.youtube_url}</p>
+          <p className="text-red-300/40 text-xs mt-1">
+            Supported formats: youtube.com/watch?v=..., youtu.be/..., or video ID
+          </p>
         </div>
       </div>
     );
@@ -157,11 +184,19 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       
       {/* Audio Player Interface */}
       <div className="space-y-4">
-        <div className="relative bg-gradient-to-r from-bible-gold/20 to-bible-purple/20 rounded-lg overflow-hidden p-4">
-          <div className="text-center text-white mb-4">
-            <div className="text-3xl mb-2">🎵</div>
-            <p className="text-sm font-medium">Audio Only: {sermon.title}</p>
-            <p className="text-xs text-white/60">YouTube Audio Stream</p>
+        {/* Audio Visualization */}
+        <div className="relative bg-gradient-to-r from-bible-gold/20 to-bible-purple/20 rounded-lg overflow-hidden p-6">
+          <div className="text-center text-white">
+            <div className="text-4xl mb-3">
+              {loading ? '⏳' : isPlaying ? '🎵' : '⏸️'}
+            </div>
+            <p className="text-lg font-medium mb-1">{sermon.title}</p>
+            <p className="text-sm text-white/70">Audio Only Mode</p>
+            {duration > 0 && (
+              <p className="text-xs text-white/50 mt-2">
+                {formatTime(currentTime)} / {formatTime(duration)}
+              </p>
+            )}
           </div>
         </div>
 
@@ -172,25 +207,27 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
         )}
 
         {/* Audio Controls */}
-        <div className="space-y-3">
+        <div className="space-y-4">
           {/* Time Slider */}
-          <div className="space-y-2">
-            <Slider
-              value={[currentTime]}
-              max={duration || 100}
-              step={1}
-              onValueChange={handleSeek}
-              className="w-full"
-              disabled={!videoId || error !== ''}
-            />
-            <div className="flex justify-between text-xs text-white/60">
-              <span>{formatTime(currentTime)}</span>
-              <span>{formatTime(duration)}</span>
+          {duration > 0 && (
+            <div className="space-y-2">
+              <Slider
+                value={[currentTime]}
+                max={duration}
+                step={1}
+                onValueChange={handleSeek}
+                className="w-full"
+                disabled={!videoId || error !== ''}
+              />
+              <div className="flex justify-between text-xs text-white/60">
+                <span>{formatTime(currentTime)}</span>
+                <span>{formatTime(duration)}</span>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Control Buttons */}
-          <div className="flex items-center justify-center gap-3">
+          <div className="flex items-center justify-center gap-4">
             <Button
               variant="ghost"
               size="sm"
@@ -204,15 +241,15 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
 
             <Button
               onClick={togglePlayPause}
-              className="bg-bible-gold hover:bg-bible-gold/80 text-bible-navy font-semibold px-6 py-2"
-              disabled={!videoId || loading || error !== ''}
+              className="bg-bible-gold hover:bg-bible-gold/80 text-bible-navy font-semibold px-8 py-3"
+              disabled={!videoId || error !== ''}
             >
               {loading ? (
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-bible-navy"></div>
               ) : isPlaying ? (
-                <Pause className="h-5 w-5" />
+                <><Pause className="h-5 w-5 mr-2" /> Pause</>
               ) : (
-                <Play className="h-5 w-5" />
+                <><Play className="h-5 w-5 mr-2" /> Play</>
               )}
             </Button>
 
@@ -235,7 +272,15 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               value={[volume]}
               max={100}
               step={1}
-              onValueChange={(value) => setVolume(value[0])}
+              onValueChange={(value) => {
+                setVolume(value[0]);
+                if (iframeRef.current) {
+                  iframeRef.current.contentWindow?.postMessage(
+                    `{"event":"command","func":"setVolume","args":[${value[0]}]}`,
+                    '*'
+                  );
+                }
+              }}
               className="flex-1"
             />
             <span className="text-xs text-white/60 w-8">{volume}%</span>
@@ -246,15 +291,15 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
         <div className="absolute top-0 left-0 w-0 h-0 overflow-hidden opacity-0 pointer-events-none">
           <iframe
             ref={iframeRef}
-            src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&autoplay=0&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&showinfo=0&mute=0&loop=0&playlist=${videoId}`}
-            title={sermon.title}
+            src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&autoplay=0&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&showinfo=0&mute=0&loop=0&origin=${window.location.origin}`}
+            title={`${sermon.title} - Audio`}
             className="w-full h-full"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           />
         </div>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-6">
         <SermonDetails
           description={sermon.description}
           bibleReferences={sermon.bible_references}
