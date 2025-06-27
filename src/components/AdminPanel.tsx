@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Trash2, Plus, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -21,7 +22,6 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
     category: '',
     youtube_url: '',
     audio_drive_url: '',
-    gdoc_summary_url: '',
     description: '',
     bible_references: '',
     sermon_date: new Date().toISOString().split('T')[0]
@@ -29,6 +29,7 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [sermons, setSermons] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [useAudioDrive, setUseAudioDrive] = useState(true);
   const { toast } = useToast();
 
   React.useEffect(() => {
@@ -65,7 +66,6 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
         category: formData.category,
         youtube_url: formData.youtube_url || null,
         audio_drive_url: formData.audio_drive_url || null,
-        gdoc_summary_url: formData.gdoc_summary_url || null,
         description: formData.description,
         bible_references: referencesArray,
         sermon_date: formData.sermon_date
@@ -102,7 +102,6 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
         category: '',
         youtube_url: '',
         audio_drive_url: '',
-        gdoc_summary_url: '',
         description: '',
         bible_references: '',
         sermon_date: new Date().toISOString().split('T')[0]
@@ -126,7 +125,6 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
       category: sermon.category,
       youtube_url: sermon.youtube_url || '',
       audio_drive_url: sermon.audio_drive_url || '',
-      gdoc_summary_url: sermon.gdoc_summary_url || '',
       description: sermon.description || '',
       bible_references: sermon.bible_references?.join(', ') || '',
       sermon_date: sermon.sermon_date
@@ -166,7 +164,6 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
       category: '',
       youtube_url: '',
       audio_drive_url: '',
-      gdoc_summary_url: '',
       description: '',
       bible_references: '',
       sermon_date: new Date().toISOString().split('T')[0]
@@ -175,6 +172,31 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
 
   return (
     <div className="space-y-6">
+      {/* Audio Source Configuration */}
+      <Card className="glass-effect border-white/20 text-white">
+        <CardHeader>
+          <CardTitle className="text-xl font-bible">Audio Player Settings</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center space-x-3">
+            <Switch
+              id="audio-source"
+              checked={useAudioDrive}
+              onCheckedChange={setUseAudioDrive}
+            />
+            <label htmlFor="audio-source" className="text-sm font-medium">
+              {useAudioDrive ? 'Using Google Drive Audio (Recommended)' : 'Using YouTube Audio'}
+            </label>
+          </div>
+          <p className="text-xs text-white/60 mt-2">
+            {useAudioDrive 
+              ? 'Audio will be played from Google Drive URLs when available' 
+              : 'Audio will be extracted from YouTube videos'
+            }
+          </p>
+        </CardContent>
+      </Card>
+
       {/* Add/Edit Sermon Form */}
       <Card className="glass-effect border-white/20 text-white">
         <CardHeader>
@@ -237,18 +259,7 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">G-Doc Summary URL (Optional)</label>
-                <Input
-                  value={formData.gdoc_summary_url}
-                  onChange={(e) => setFormData(prev => ({ ...prev, gdoc_summary_url: e.target.value }))}
-                  type="url"
-                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
-                  placeholder="https://docs.google.com/..."
-                />
-              </div>
-
-              <div>
+              <div className="md:col-span-2">
                 <label className="block text-sm font-medium mb-2">Date</label>
                 <Input
                   value={formData.sermon_date}
