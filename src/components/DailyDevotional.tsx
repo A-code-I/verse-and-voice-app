@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -77,16 +76,36 @@ const DailyDevotional = () => {
   };
 
   const formatContent = (content: string) => {
-    return content.split('\n').map((paragraph, index) => (
-      <p key={index} className="mb-2 last:mb-0">
-        {paragraph}
-      </p>
-    ));
+    return content.split('\n').map((paragraph, index) => {
+      // Replace *text* with <strong>text</strong> for bold formatting
+      const formattedParagraph = paragraph.replace(/\*(.*?)\*/g, '<strong>$1</strong>');
+      
+      return (
+        <p 
+          key={index} 
+          className="mb-2 last:mb-0"
+          dangerouslySetInnerHTML={{ __html: formattedParagraph }}
+        />
+      );
+    });
   };
 
   const getContentPreview = (content: string, maxLength: number = 200) => {
-    if (content.length <= maxLength) return content;
-    return content.substring(0, maxLength) + '...';
+    // Remove markdown formatting for preview length calculation
+    const plainText = content.replace(/\*(.*?)\*/g, '$1');
+    if (plainText.length <= maxLength) return content;
+    
+    // Find a good breaking point that doesn't cut off bold text
+    let truncated = content.substring(0, maxLength);
+    const lastAsterisk = truncated.lastIndexOf('*');
+    const secondLastAsterisk = truncated.lastIndexOf('*', lastAsterisk - 1);
+    
+    // If we're in the middle of bold text, truncate before it
+    if (lastAsterisk > secondLastAsterisk && (truncated.match(/\*/g) || []).length % 2 === 1) {
+      truncated = content.substring(0, secondLastAsterisk);
+    }
+    
+    return truncated + '...';
   };
 
   return (
