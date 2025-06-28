@@ -19,6 +19,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   const [volume, setVolume] = useState(70);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
+  const [playerReady, setPlayerReady] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // More flexible YouTube video ID extraction including live streams
@@ -59,6 +60,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     setDuration(0);
     setError('');
     setLoading(false);
+    setPlayerReady(false);
   }, [sermon.id]);
 
   // Listen for YouTube player events
@@ -68,16 +70,23 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       
       try {
         const data = JSON.parse(event.data);
+        console.log('YouTube player message:', data);
+        
         if (data.event === 'video-progress') {
           setCurrentTime(data.info.currentTime || 0);
           setDuration(data.info.duration || 0);
         } else if (data.event === 'onStateChange') {
           // YouTube player state: -1 (unstarted), 0 (ended), 1 (playing), 2 (paused), 3 (buffering), 5 (cued)
+          console.log('Player state changed:', data.info);
           setIsPlaying(data.info === 1);
           setLoading(data.info === 3);
+        } else if (data.event === 'onReady') {
+          console.log('YouTube player ready');
+          setPlayerReady(true);
+          setError('');
         }
       } catch (error) {
-        // Ignore parsing errors
+        console.log('Error parsing YouTube message:', error);
       }
     };
 
@@ -85,52 +94,71 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  const sendPlayerCommand = (command: string, args?: any[]) => {
+    if (!videoId || !iframeRef.current || !playerReady) {
+      console.log('Cannot send command - player not ready:', { videoId: !!videoId, iframe: !!iframeRef.current, playerReady });
+      setError('Player not ready');
+      return false;
+    }
+
+    try {
+      const message = {
+        event: 'command',
+        func: command,
+        args: args || []
+      };
+      console.log('Sending YouTube command:', message);
+      iframeRef.current.contentWindow?.postMessage(JSON.stringify(message), '*');
+      return true;
+    } catch (error) {
+      console.error('Error sending YouTube command:', error);
+      setError('Failed to control playback');
+      return false;
+    }
+  };
+
   const togglePlayPause = () => {
-    if (!videoId || !iframeRef.current) {
+    if (!videoId) {
       setError('Invalid YouTube URL');
       return;
     }
 
     setError('');
     
-    try {
-      if (isPlaying) {
-        iframeRef.current.contentWindow?.postMessage(
-          '{"event":"command","func":"pauseVideo","args":""}',
-          '*'
-        );
-      } else {
-        iframeRef.current.contentWindow?.postMessage(
-          '{"event":"command","func":"playVideo","args":""}',
-          '*'
-        );
-      }
-    } catch (error) {
-      console.error('Error controlling YouTube player:', error);
-      setError('Failed to control playback');
+    if (isPlaying) {
+      sendPlayerCommand('pauseVideo');
+    } else {
+      sendPlayerCommand('playVideo');
     }
   };
 
   const skipTime = (seconds: number) => {
-    if (!videoId || !iframeRef.current) return;
+    if (!videoId || !playerReady) return;
     
     const newTime = Math.max(0, currentTime + seconds);
-    iframeRef.current.contentWindow?.postMessage(
-      `{"event":"command","func":"seekTo","args":[${newTime},true]}`,
-      '*'
-    );
-    setCurrentTime(newTime);
+    sendPlayerCommand('seekTo', [newTime, true]);
   };
 
   const handleSeek = (value: number[]) => {
     const newTime = value[0];
-    if (!videoId || !iframeRef.current) return;
+    if (!videoId || !playerReady) return;
     
-    iframeRef.current.contentWindow?.postMessage(
-      `{"event":"command","func":"seekTo","args":[${newTime},true]}`,
-      '*'
-    );
-    setCurrentTime(newTime);
+    sendPlayerCommand('seekTo', [newTime, true]);
+  };
+
+  const handleVolumeChange = (value: number[]) => {
+    const newVolume = value[0];
+    setVolume(newVolume);
+    sendPlayerCommand('setVolume', [newVolume]);
+  };
+
+  const handleLikeClick = () => {
+    console.log('Like button clicked for sermon:', sermon.id);
+    try {
+      onLike();
+    } catch (error) {
+      console.error('Error in like function:', error);
+    }
   };
 
   const formatTime = (time: number) => {
@@ -173,7 +201,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
         </div>
         <Button
           variant="ghost"
-          onClick={onLike}
+          onClick={handleLikeClick}
           className="text-white hover:bg-white/20"
         >
           <Heart 
@@ -192,7 +220,9 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               {loading ? '⏳' : isPlaying ? '🎵' : '⏸️'}
             </div>
             <p className="text-lg font-medium mb-1">{sermon.title}</p>
-            <p className="text-sm text-white/70">Audio Only Mode</p>
+            <p className="text-sm text-white/70">
+              {playerReady ? 'Audio Only Mode' : 'Loading Player...'}
+            </p>
             {duration > 0 && (
               <p className="text-xs text-white/50 mt-2">
                 {formatTime(currentTime)} / {formatTime(duration)}
@@ -218,7 +248,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
                 step={1}
                 onValueChange={handleSeek}
                 className="w-full"
-                disabled={!videoId || error !== ''}
+                disabled={!playerReady || error !== ''}
               />
               <div className="flex justify-between text-xs text-white/60">
                 <span>{formatTime(currentTime)}</span>
@@ -234,7 +264,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               size="sm"
               onClick={() => skipTime(-5)}
               className="text-white hover:bg-white/20"
-              disabled={!videoId || error !== ''}
+              disabled={!playerReady || error !== ''}
             >
               <SkipBack className="h-4 w-4" />
               <span className="text-xs ml-1">5s</span>
@@ -243,7 +273,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
             <Button
               onClick={togglePlayPause}
               className="bg-bible-gold hover:bg-bible-gold/80 text-bible-navy font-semibold px-8 py-3"
-              disabled={!videoId || error !== ''}
+              disabled={!playerReady || error !== ''}
             >
               {loading ? (
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-bible-navy"></div>
@@ -259,7 +289,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               size="sm"
               onClick={() => skipTime(5)}
               className="text-white hover:bg-white/20"
-              disabled={!videoId || error !== ''}
+              disabled={!playerReady || error !== ''}
             >
               <span className="text-xs mr-1">5s</span>
               <SkipForward className="h-4 w-4" />
@@ -273,16 +303,9 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               value={[volume]}
               max={100}
               step={1}
-              onValueChange={(value) => {
-                setVolume(value[0]);
-                if (iframeRef.current) {
-                  iframeRef.current.contentWindow?.postMessage(
-                    `{"event":"command","func":"setVolume","args":[${value[0]}]}`,
-                    '*'
-                  );
-                }
-              }}
+              onValueChange={handleVolumeChange}
               className="flex-1"
+              disabled={!playerReady}
             />
             <span className="text-xs text-white/60 w-8">{volume}%</span>
           </div>
@@ -292,10 +315,15 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
         <div className="absolute top-0 left-0 w-0 h-0 overflow-hidden opacity-0 pointer-events-none">
           <iframe
             ref={iframeRef}
-            src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&autoplay=0&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&showinfo=0&mute=0&loop=0&origin=${window.location.origin}`}
+            src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&autoplay=0&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&showinfo=0&mute=0&loop=0&origin=${encodeURIComponent(window.location.origin)}`}
             title={`${sermon.title} - Audio`}
             className="w-full h-full"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            onLoad={() => {
+              console.log('YouTube iframe loaded');
+              // Give the player some time to initialize
+              setTimeout(() => setPlayerReady(true), 1000);
+            }}
           />
         </div>
       </div>
