@@ -14,6 +14,7 @@ import ProtectedContent from '@/components/ProtectedContent';
 import UserManagement from '@/components/UserManagement';
 import DailyDevotional from '@/components/DailyDevotional';
 import DevotionalManagement from '@/components/DevotionalManagement';
+import DevotionalCards from '@/components/DevotionalCards';
 import { useToast } from "@/hooks/use-toast";
 import { LogOut, Users, BookOpen, Calendar } from "lucide-react";
 
@@ -39,11 +40,22 @@ export interface UserProfile {
   created_at: string;
 }
 
+export interface DevotionalReading {
+  id: string;
+  title: string;
+  type: string;
+  devotional_date: string;
+  bible_references: string[];
+  content: string;
+  created_at: string;
+}
+
 const Index = () => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [sermons, setSermons] = useState<Sermon[]>([]);
+  const [devotionals, setDevotionals] = useState<DevotionalReading[]>([]);
   const [currentSermon, setCurrentSermon] = useState<Sermon | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
   const [showUserManagement, setShowUserManagement] = useState(false);
@@ -166,9 +178,26 @@ const Index = () => {
     }
   };
 
+  // Fetch devotionals for main page cards
+  const fetchDevotionals = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('devotionals')
+        .select('*')
+        .order('devotional_date', { ascending: false })
+        .limit(3); // Get latest 3 devotionals for main page
+
+      if (error) throw error;
+      setDevotionals(data || []);
+    } catch (error) {
+      console.error('Error fetching devotionals:', error);
+    }
+  };
+
   useEffect(() => {
     if (userProfile?.has_access) {
       fetchSermons();
+      fetchDevotionals();
     }
   }, [userProfile]);
 
@@ -314,7 +343,7 @@ const Index = () => {
           <div className="flex justify-between items-center mb-6">
             <div></div>
             <h1 className="text-5xl font-bible font-bold text-white animate-fade-in">
-              Living Word Ministry
+              Living Word
             </h1>
             <div className="flex gap-2">
               <Button 
@@ -427,6 +456,9 @@ const Index = () => {
           <div className="grid gap-8">
             {/* Daily Verse */}
             <DailyVerse />
+
+            {/* Daily Devotionals Cards */}
+            <DevotionalCards devotionals={devotionals} />
 
             {/* Sermon Categories */}
             <SermonSection 
