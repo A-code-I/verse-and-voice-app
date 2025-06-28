@@ -3,28 +3,19 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Heart, Play, Pause, Calendar, ArrowRight } from "lucide-react";
+import { Heart, Play, Pause, Calendar } from "lucide-react";
 import { Sermon } from '@/pages/Index';
 import AudioPlayer from './AudioPlayer';
 
-interface SermonSectionProps {
+interface SermonLibraryProps {
   sermons: Sermon[];
   categories: string[];
-  onSelectSermon: (sermon: Sermon) => void;
   onLikeSermon: (sermonId: string) => void;
-  currentSermon: Sermon | null;
-  onViewAllSermons?: () => void;
 }
 
-const SermonSection = ({ 
-  sermons, 
-  categories, 
-  onSelectSermon, 
-  onLikeSermon,
-  currentSermon,
-  onViewAllSermons
-}: SermonSectionProps) => {
+const SermonLibrary = ({ sermons, categories, onLikeSermon }: SermonLibraryProps) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [currentSermon, setCurrentSermon] = useState<Sermon | null>(null);
 
   // Reset category selection when sermons change
   useEffect(() => {
@@ -33,10 +24,9 @@ const SermonSection = ({
     }
   }, [sermons]);
 
-  // Show only latest 6 sermons for main page
   const filteredSermons = selectedCategory === 'All' 
-    ? sermons.slice(0, 6)
-    : sermons.filter(sermon => sermon.category === selectedCategory).slice(0, 6);
+    ? sermons 
+    : sermons.filter(sermon => sermon.category === selectedCategory);
 
   const handleCategorySelect = (category: string) => {
     setSelectedCategory(category);
@@ -44,9 +34,9 @@ const SermonSection = ({
 
   const handleSermonSelect = (sermon: Sermon) => {
     if (currentSermon?.id === sermon.id) {
-      onSelectSermon(null);
+      setCurrentSermon(null);
     } else {
-      onSelectSermon(sermon);
+      setCurrentSermon(sermon);
     }
   };
 
@@ -58,27 +48,14 @@ const SermonSection = ({
     <div className="space-y-6">
       <Card className="glass-effect border-white/20 text-white">
         <CardHeader>
-          <div className="flex justify-between items-center">
-            <div className="text-center flex-1">
-              <CardTitle className="text-2xl font-bible flex items-center justify-center gap-2">
-                <Calendar className="h-6 w-6" />
-                Latest Bible Sermons
-              </CardTitle>
-              <p className="text-white/80 mt-2">Recent spiritual messages and teachings</p>
-            </div>
-            {onViewAllSermons && (
-              <Button 
-                onClick={onViewAllSermons}
-                variant="outline"
-                className="bg-white/10 border-white/30 text-white hover:bg-white/20"
-              >
-                View All <ArrowRight className="h-4 w-4 ml-1" />
-              </Button>
-            )}
-          </div>
+          <CardTitle className="text-3xl font-bible text-center flex items-center justify-center gap-2">
+            <Calendar className="h-8 w-8" />
+            Sermon Library
+          </CardTitle>
+          <p className="text-center text-white/80">Complete collection of our Bible sermons</p>
         </CardHeader>
         <CardContent>
-          {/* Compact Category Filter - Show only popular categories */}
+          {/* Category Filter */}
           <div className="flex flex-wrap gap-2 mb-6 justify-center">
             <Button
               variant={selectedCategory === 'All' ? 'default' : 'outline'}
@@ -88,21 +65,24 @@ const SermonSection = ({
                 : 'border-white/30 text-white bg-white/10 hover:bg-white/20'
               }
             >
-              Latest
+              All Sermons ({sermons.length})
             </Button>
-            {['Sunday Service', 'Wednesday Service', 'Saturday Service', 'Revival Meeting'].map(category => (
-              <Button
-                key={category}
-                variant={selectedCategory === category ? 'default' : 'outline'}
-                onClick={() => handleCategorySelect(category)}
-                className={selectedCategory === category 
-                  ? 'bg-bible-gold text-bible-navy hover:bg-bible-gold/80' 
-                  : 'border-white/30 text-white bg-white/10 hover:bg-white/20'
-                }
-              >
-                {category}
-              </Button>
-            ))}
+            {categories.map(category => {
+              const count = sermons.filter(s => s.category === category).length;
+              return (
+                <Button
+                  key={category}
+                  variant={selectedCategory === category ? 'default' : 'outline'}
+                  onClick={() => handleCategorySelect(category)}
+                  className={selectedCategory === category 
+                    ? 'bg-bible-gold text-bible-navy hover:bg-bible-gold/80' 
+                    : 'border-white/30 text-white bg-white/10 hover:bg-white/20'
+                  }
+                >
+                  {category} ({count})
+                </Button>
+              );
+            })}
           </div>
 
           {/* Sermons Grid */}
@@ -155,18 +135,18 @@ const SermonSection = ({
                       </Badge>
                       {sermon.audio_drive_url && (
                         <Badge variant="outline" className="border-green-400/50 text-green-300">
-                          Audio
+                          Drive Audio
                         </Badge>
                       )}
                       {sermon.youtube_url && (
                         <Badge variant="outline" className="border-red-400/50 text-red-300">
-                          Video
+                          YouTube
                         </Badge>
                       )}
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <p className="text-white/80 text-sm line-clamp-2">
+                    <p className="text-white/80 text-sm line-clamp-3">
                       {sermon.description}
                     </p>
                     
@@ -174,7 +154,7 @@ const SermonSection = ({
                       <div className="space-y-2">
                         <p className="text-xs font-semibold text-bible-gold">Bible References:</p>
                         <div className="flex flex-wrap gap-1">
-                          {sermon.bible_references.slice(0, 3).map((ref, index) => (
+                          {sermon.bible_references.map((ref, index) => (
                             <Badge 
                               key={index} 
                               variant="outline" 
@@ -187,11 +167,6 @@ const SermonSection = ({
                               {ref}
                             </Badge>
                           ))}
-                          {sermon.bible_references.length > 3 && (
-                            <Badge variant="outline" className="text-xs border-white/30 text-white/60">
-                              +{sermon.bible_references.length - 3} more
-                            </Badge>
-                          )}
                         </div>
                       </div>
                     )}
@@ -225,23 +200,10 @@ const SermonSection = ({
               <p className="text-white/60 text-lg">No sermons found for this category.</p>
             </div>
           )}
-
-          {/* View All Button at bottom */}
-          {onViewAllSermons && sermons.length > 6 && (
-            <div className="text-center mt-8">
-              <Button 
-                onClick={onViewAllSermons}
-                variant="outline"
-                className="bg-white/10 border-white/30 text-white hover:bg-white/20"
-              >
-                View All {sermons.length} Sermons <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </div>
-          )}
         </CardContent>
       </Card>
     </div>
   );
 };
 
-export default SermonSection;
+export default SermonLibrary;

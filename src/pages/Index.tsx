@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
-import { User, Session } from '@supabase/supabase-js';
+import { User, Session } from '@supabase/supabase-js";
 import DailyVerse from '@/components/DailyVerse';
 import SermonSection from '@/components/SermonSection';
 import AudioPlayer from '@/components/AudioPlayer';
@@ -17,6 +17,7 @@ import DevotionalManagement from '@/components/DevotionalManagement';
 import DevotionalCards from '@/components/DevotionalCards';
 import { useToast } from "@/hooks/use-toast";
 import { LogOut, Users, BookOpen, Calendar } from "lucide-react";
+import SermonLibrary from '@/components/SermonLibrary';
 
 export interface Sermon {
   id: string;
@@ -61,6 +62,7 @@ const Index = () => {
   const [showUserManagement, setShowUserManagement] = useState(false);
   const [showDevotional, setShowDevotional] = useState(false);
   const [showDevotionalManagement, setShowDevotionalManagement] = useState(false);
+  const [showSermonLibrary, setShowSermonLibrary] = useState(false);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string>('');
   const { toast } = useToast();
@@ -253,6 +255,7 @@ const Index = () => {
       setShowUserManagement(false);
       setShowDevotional(false);
       setShowDevotionalManagement(false);
+      setShowSermonLibrary(false);
       toast({
         title: "Logged out",
         description: "You have been successfully logged out.",
@@ -300,6 +303,7 @@ const Index = () => {
     setShowUserManagement(false);
     setShowDevotional(false);
     setShowDevotionalManagement(false);
+    setShowSermonLibrary(false);
   };
 
   if (loading) {
@@ -366,12 +370,27 @@ const Index = () => {
               onClick={() => {
                 resetNavigation();
               }}
-              variant={!showAdmin && !showUserManagement && !showDevotional && !showDevotionalManagement ? "default" : "outline"}
-              className={!showAdmin && !showUserManagement && !showDevotional && !showDevotionalManagement
+              variant={!showAdmin && !showUserManagement && !showDevotional && !showDevotionalManagement && !showSermonLibrary ? "default" : "outline"}
+              className={!showAdmin && !showUserManagement && !showDevotional && !showDevotionalManagement && !showSermonLibrary
                 ? "bg-bible-gold text-bible-navy hover:bg-bible-gold/80" 
                 : "bg-white/20 border-white/30 text-white hover:bg-white/30"
               }
             >
+              Home
+            </Button>
+
+            <Button 
+              onClick={() => {
+                resetNavigation();
+                setShowSermonLibrary(true);
+              }}
+              variant={showSermonLibrary ? "default" : "outline"}
+              className={showSermonLibrary
+                ? "bg-bible-gold text-bible-navy hover:bg-bible-gold/80" 
+                : "bg-white/20 border-white/30 text-white hover:bg-white/30"
+              }
+            >
+              <Calendar className="h-4 w-4 mr-2" />
               Sermons
             </Button>
             
@@ -445,6 +464,12 @@ const Index = () => {
           <DevotionalManagement />
         ) : showDevotional ? (
           <DailyDevotional />
+        ) : showSermonLibrary ? (
+          <SermonLibrary 
+            sermons={sermons}
+            categories={categories}
+            onLikeSermon={handleLikeSermon}
+          />
         ) : showUserManagement && userProfile?.role === 'admin' ? (
           <UserManagement />
         ) : showAdmin && userProfile?.role === 'admin' ? (
@@ -460,13 +485,17 @@ const Index = () => {
             {/* Daily Devotionals Cards */}
             <DevotionalCards devotionals={devotionals} />
 
-            {/* Sermon Categories */}
+            {/* Recent Sermon Categories - Compact Version */}
             <SermonSection 
               sermons={sermons}
               categories={categories}
               onSelectSermon={setCurrentSermon}
               onLikeSermon={handleLikeSermon}
               currentSermon={currentSermon}
+              onViewAllSermons={() => {
+                resetNavigation();
+                setShowSermonLibrary(true);
+              }}
             />
           </div>
         )}
