@@ -65,6 +65,47 @@ const Index = () => {
     return () => subscription.unsubscribe();
   }, [recordUserStatistics, checkHostChanges]);
 
+  const handleLogin = async (email: string, password: string) => {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Welcome back!",
+        description: "You have been logged in successfully.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Login Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/`
+        }
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
+      toast({
+        title: "Login Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   // Show loading while checking auth settings
   if (authSettingsLoading || loading) {
     return (
@@ -84,7 +125,13 @@ const Index = () => {
 
   // If authentication is enabled, check if user is logged in
   if (!user || !session) {
-    return <LoginPage />;
+    return (
+      <LoginPage 
+        onLogin={handleLogin}
+        onGoogleLogin={handleGoogleLogin}
+        isLoading={loading}
+      />
+    );
   }
 
   return <ProtectedContent user={user} session={session} />;

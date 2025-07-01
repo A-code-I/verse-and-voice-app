@@ -9,7 +9,6 @@ import SermonLibrary from "@/components/SermonLibrary";
 import DailyDevotional from "@/components/DailyDevotional";
 import DriveSermonSection from "@/components/DriveSermonSection";
 import AdminPanel from "@/components/AdminPanel";
-import LoginPage from "@/components/LoginPage";
 
 interface ProtectedContentProps {
   user: User | null;
@@ -174,11 +173,6 @@ const ProtectedContent = ({ user, session }: ProtectedContentProps) => {
       });
     }
   };
-
-  // Show login page if no user and no session
-  if (!user && !session) {
-    return <LoginPage />;
-  }
 
   // Check if user has access (unless they're admin)
   if (user && userProfile && !userProfile.has_access && userProfile.role !== 'admin') {

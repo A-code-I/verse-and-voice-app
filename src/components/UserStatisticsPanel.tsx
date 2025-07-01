@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -71,17 +70,17 @@ const UserStatisticsPanel = () => {
     }
   };
 
-  const getUniqueUsers = () => {
+  function getUniqueUsers() {
     const uniqueUsers = new Set(statistics.map(stat => stat.user_id));
     return uniqueUsers.size;
-  };
+  }
 
-  const getUniqueHosts = () => {
+  function getUniqueHosts() {
     const uniqueHosts = new Set(statistics.map(stat => stat.host_id));
     return uniqueHosts.size;
-  };
+  }
 
-  const formatUserAgent = (userAgent: string | null) => {
+  function formatUserAgent(userAgent: string | null) {
     if (!userAgent) return 'Unknown';
     
     if (userAgent.includes('Chrome')) return 'Chrome';
@@ -89,7 +88,7 @@ const UserStatisticsPanel = () => {
     if (userAgent.includes('Safari')) return 'Safari';
     if (userAgent.includes('Edge')) return 'Edge';
     return 'Other';
-  };
+  }
 
   return (
     <div className="space-y-6">
