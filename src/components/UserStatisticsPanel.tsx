@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -43,14 +42,46 @@ const UserStatisticsPanel = () => {
           ip_address,
           user_agent,
           created_at,
-          profiles!inner(email)
+          profiles!user_statistics_user_id_fkey(email)
         `)
         .order('created_at', { ascending: false })
         .limit(50);
 
       if (statsError) {
         console.error('Error fetching statistics:', statsError);
-        throw statsError;
+        // If the foreign key join fails, try a simpler approach
+        const { data: simpleStats, error: simpleError } = await supabase
+          .from('user_statistics')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(50);
+        
+        if (simpleError) {
+          throw simpleError;
+        }
+        
+        // Process without profile information
+        if (simpleStats) {
+          const processedStats = simpleStats.map(stat => ({
+            ...stat,
+            ip_address: stat.ip_address ? String(stat.ip_address) : null,
+          })) as UserStatistic[];
+
+          const regularStats = processedStats.filter(stat => stat.host_id !== 'HOST_CHANGE_DETECTED');
+          const changes = processedStats.filter(stat => stat.host_id === 'HOST_CHANGE_DETECTED');
+
+          setStatistics(regularStats);
+          setHostChanges(changes);
+
+          if (changes.length > 0) {
+            toast({
+              title: "Host Changes Detected",
+              description: `${changes.length} potential security alerts found`,
+              variant: "destructive",
+            });
+          }
+        }
+        return;
       }
 
       if (stats) {
