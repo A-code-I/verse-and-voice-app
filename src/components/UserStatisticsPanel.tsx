@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -31,31 +32,48 @@ const UserStatisticsPanel = () => {
   const fetchStatistics = async () => {
     setLoading(true);
     try {
-      // Fetch all user statistics
+      // Fetch all user statistics with profile information
       const { data: stats, error: statsError } = await supabase
         .from('user_statistics')
         .select(`
-          *,
-          profiles:user_id (email)
+          id,
+          user_id,
+          host_id,
+          login_timestamp,
+          ip_address,
+          user_agent,
+          created_at,
+          profiles!inner(email)
         `)
         .order('created_at', { ascending: false })
         .limit(50);
 
-      if (statsError) throw statsError;
+      if (statsError) {
+        console.error('Error fetching statistics:', statsError);
+        throw statsError;
+      }
 
-      // Separate regular statistics from host change notifications
-      const regularStats = stats?.filter(stat => stat.host_id !== 'HOST_CHANGE_DETECTED') || [];
-      const changes = stats?.filter(stat => stat.host_id === 'HOST_CHANGE_DETECTED') || [];
+      if (stats) {
+        // Convert ip_address from unknown to string | null and process data
+        const processedStats = stats.map(stat => ({
+          ...stat,
+          ip_address: stat.ip_address ? String(stat.ip_address) : null,
+        })) as UserStatistic[];
 
-      setStatistics(regularStats);
-      setHostChanges(changes);
+        // Separate regular statistics from host change notifications
+        const regularStats = processedStats.filter(stat => stat.host_id !== 'HOST_CHANGE_DETECTED');
+        const changes = processedStats.filter(stat => stat.host_id === 'HOST_CHANGE_DETECTED');
 
-      if (changes.length > 0) {
-        toast({
-          title: "Host Changes Detected",
-          description: `${changes.length} potential security alerts found`,
-          variant: "destructive",
-        });
+        setStatistics(regularStats);
+        setHostChanges(changes);
+
+        if (changes.length > 0) {
+          toast({
+            title: "Host Changes Detected",
+            description: `${changes.length} potential security alerts found`,
+            variant: "destructive",
+          });
+        }
       }
 
     } catch (error: any) {
