@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { BookOpen, Calendar, ChevronDown, ChevronUp } from "lucide-react";
-import { DevotionalReading } from '@/types/devotional';
+import { DevotionalReading } from '@/pages/Index';
 
 interface DevotionalCardsProps {
   devotionals: DevotionalReading[];

@@ -9,30 +9,6 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      auth_settings: {
-        Row: {
-          id: string
-          setting_name: string
-          setting_value: boolean | null
-          updated_at: string | null
-          updated_by: string | null
-        }
-        Insert: {
-          id?: string
-          setting_name: string
-          setting_value?: boolean | null
-          updated_at?: string | null
-          updated_by?: string | null
-        }
-        Update: {
-          id?: string
-          setting_name?: string
-          setting_value?: boolean | null
-          updated_at?: string | null
-          updated_by?: string | null
-        }
-        Relationships: []
-      }
       devotionals: {
         Row: {
           bible_references: string[]
@@ -63,45 +39,6 @@ export type Database = {
           title?: string
           type?: string
           updated_at?: string
-        }
-        Relationships: []
-      }
-      drive_sermons: {
-        Row: {
-          bible_references: string[] | null
-          category: string
-          created_at: string | null
-          description: string | null
-          drive_audio_url: string
-          id: string
-          likes: number | null
-          sermon_date: string
-          title: string
-          updated_at: string | null
-        }
-        Insert: {
-          bible_references?: string[] | null
-          category: string
-          created_at?: string | null
-          description?: string | null
-          drive_audio_url: string
-          id?: string
-          likes?: number | null
-          sermon_date: string
-          title: string
-          updated_at?: string | null
-        }
-        Update: {
-          bible_references?: string[] | null
-          category?: string
-          created_at?: string | null
-          description?: string | null
-          drive_audio_url?: string
-          id?: string
-          likes?: number | null
-          sermon_date?: string
-          title?: string
-          updated_at?: string | null
         }
         Relationships: []
       }
@@ -177,35 +114,6 @@ export type Database = {
         }
         Relationships: []
       }
-      user_drive_sermon_likes: {
-        Row: {
-          created_at: string | null
-          drive_sermon_id: string
-          id: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          drive_sermon_id: string
-          id?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string | null
-          drive_sermon_id?: string
-          id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "user_drive_sermon_likes_drive_sermon_id_fkey"
-            columns: ["drive_sermon_id"]
-            isOneToOne: false
-            referencedRelation: "drive_sermons"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       user_sermon_likes: {
         Row: {
           created_at: string
@@ -234,36 +142,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      user_statistics: {
-        Row: {
-          created_at: string | null
-          host_id: string
-          id: string
-          ip_address: unknown | null
-          login_timestamp: string | null
-          user_agent: string | null
-          user_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          host_id: string
-          id?: string
-          ip_address?: unknown | null
-          login_timestamp?: string | null
-          user_agent?: string | null
-          user_id: string
-        }
-        Update: {
-          created_at?: string | null
-          host_id?: string
-          id?: string
-          ip_address?: unknown | null
-          login_timestamp?: string | null
-          user_agent?: string | null
-          user_id?: string
-        }
-        Relationships: []
       }
     }
     Views: {
