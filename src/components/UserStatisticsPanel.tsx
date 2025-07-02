@@ -15,7 +15,7 @@ interface UserStatistic {
   created_at: string;
   profiles?: {
     email: string;
-  };
+  } | null;
 }
 
 const UserStatisticsPanel = () => {
@@ -31,7 +31,7 @@ const UserStatisticsPanel = () => {
   const fetchStatistics = async () => {
     setLoading(true);
     try {
-      // Fetch all user statistics with profile information
+      // Try to fetch user statistics with profile information
       const { data: stats, error: statsError } = await supabase
         .from('user_statistics')
         .select(`
@@ -41,55 +41,36 @@ const UserStatisticsPanel = () => {
           login_timestamp,
           ip_address,
           user_agent,
-          created_at,
-          profiles!user_statistics_user_id_fkey(email)
+          created_at
         `)
         .order('created_at', { ascending: false })
         .limit(50);
 
       if (statsError) {
         console.error('Error fetching statistics:', statsError);
-        // If the foreign key join fails, try a simpler approach
-        const { data: simpleStats, error: simpleError } = await supabase
-          .from('user_statistics')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(50);
-        
-        if (simpleError) {
-          throw simpleError;
-        }
-        
-        // Process without profile information
-        if (simpleStats) {
-          const processedStats = simpleStats.map(stat => ({
-            ...stat,
-            ip_address: stat.ip_address ? String(stat.ip_address) : null,
-          })) as UserStatistic[];
-
-          const regularStats = processedStats.filter(stat => stat.host_id !== 'HOST_CHANGE_DETECTED');
-          const changes = processedStats.filter(stat => stat.host_id === 'HOST_CHANGE_DETECTED');
-
-          setStatistics(regularStats);
-          setHostChanges(changes);
-
-          if (changes.length > 0) {
-            toast({
-              title: "Host Changes Detected",
-              description: `${changes.length} potential security alerts found`,
-              variant: "destructive",
-            });
-          }
-        }
-        return;
+        throw statsError;
       }
 
       if (stats) {
-        // Convert ip_address from unknown to string | null and process data
-        const processedStats = stats.map(stat => ({
-          ...stat,
-          ip_address: stat.ip_address ? String(stat.ip_address) : null,
-        })) as UserStatistic[];
+        // Convert ip_address from unknown to string | null and get profile data separately
+        const processedStats: UserStatistic[] = [];
+        
+        for (const stat of stats) {
+          // Fetch profile data separately for each user
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('email')
+            .eq('id', stat.user_id)
+            .single();
+
+          const processedStat: UserStatistic = {
+            ...stat,
+            ip_address: stat.ip_address ? String(stat.ip_address) : null,
+            profiles: profile ? { email: profile.email || 'Unknown' } : null
+          };
+          
+          processedStats.push(processedStat);
+        }
 
         // Separate regular statistics from host change notifications
         const regularStats = processedStats.filter(stat => stat.host_id !== 'HOST_CHANGE_DETECTED');
