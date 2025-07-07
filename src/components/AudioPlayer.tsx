@@ -20,7 +20,10 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [playerReady, setPlayerReady] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [lastPlayedPosition, setLastPlayedPosition] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const progressUpdateInterval = useRef<NodeJS.Timeout | null>(null);
 
   // More flexible YouTube video ID extraction including live streams
   const getYouTubeVideoId = (url: string): string | null => {
@@ -53,6 +56,25 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
 
   const videoId = sermon.youtube_url ? getYouTubeVideoId(sermon.youtube_url) : null;
 
+  // Load last played position from localStorage
+  useEffect(() => {
+    if (videoId) {
+      const savedPosition = localStorage.getItem(`sermon-position-${videoId}`);
+      if (savedPosition) {
+        const position = parseFloat(savedPosition);
+        setLastPlayedPosition(position);
+        setCurrentTime(position);
+      }
+    }
+  }, [videoId]);
+
+  // Save current position to localStorage periodically
+  useEffect(() => {
+    if (videoId && currentTime > 0 && !isDragging) {
+      localStorage.setItem(`sermon-position-${videoId}`, currentTime.toString());
+    }
+  }, [videoId, currentTime, isDragging]);
+
   // Reset player when sermon changes
   useEffect(() => {
     setIsPlaying(false);
@@ -61,7 +83,34 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     setError('');
     setLoading(false);
     setPlayerReady(false);
+    setIsDragging(false);
+    
+    // Clear progress interval
+    if (progressUpdateInterval.current) {
+      clearInterval(progressUpdateInterval.current);
+      progressUpdateInterval.current = null;
+    }
   }, [sermon.id]);
+
+  // Start progress tracking when playing
+  useEffect(() => {
+    if (isPlaying && playerReady && !isDragging) {
+      progressUpdateInterval.current = setInterval(() => {
+        requestCurrentTime();
+      }, 1000);
+    } else {
+      if (progressUpdateInterval.current) {
+        clearInterval(progressUpdateInterval.current);
+        progressUpdateInterval.current = null;
+      }
+    }
+
+    return () => {
+      if (progressUpdateInterval.current) {
+        clearInterval(progressUpdateInterval.current);
+      }
+    };
+  }, [isPlaying, playerReady, isDragging]);
 
   // Listen for YouTube player events
   useEffect(() => {
@@ -73,17 +122,35 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
         console.log('YouTube player message:', data);
         
         if (data.event === 'video-progress') {
-          setCurrentTime(data.info.currentTime || 0);
+          if (!isDragging) {
+            setCurrentTime(data.info.currentTime || 0);
+          }
           setDuration(data.info.duration || 0);
         } else if (data.event === 'onStateChange') {
           // YouTube player state: -1 (unstarted), 0 (ended), 1 (playing), 2 (paused), 3 (buffering), 5 (cued)
           console.log('Player state changed:', data.info);
           setIsPlaying(data.info === 1);
           setLoading(data.info === 3);
+          
+          // Handle video end
+          if (data.info === 0) {
+            setCurrentTime(0);
+            localStorage.removeItem(`sermon-position-${videoId}`);
+          }
         } else if (data.event === 'onReady') {
           console.log('YouTube player ready');
           setPlayerReady(true);
           setError('');
+          
+          // Set volume and seek to last position
+          setTimeout(() => {
+            sendPlayerCommand('setVolume', [volume]);
+            if (lastPlayedPosition > 0) {
+              sendPlayerCommand('seekTo', [lastPlayedPosition, true]);
+            }
+            requestCurrentTime();
+            requestDuration();
+          }, 500);
         }
       } catch (error) {
         console.log('Error parsing YouTube message:', error);
@@ -92,7 +159,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, []);
+  }, [isDragging, lastPlayedPosition, volume, videoId]);
 
   const sendPlayerCommand = (command: string, args?: any[]) => {
     if (!videoId || !iframeRef.current || !playerReady) {
@@ -117,6 +184,14 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     }
   };
 
+  const requestCurrentTime = () => {
+    sendPlayerCommand('getCurrentTime');
+  };
+
+  const requestDuration = () => {
+    sendPlayerCommand('getDuration');
+  };
+
   const togglePlayPause = () => {
     if (!videoId) {
       setError('Invalid YouTube URL');
@@ -135,15 +210,32 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   const skipTime = (seconds: number) => {
     if (!videoId || !playerReady) return;
     
-    const newTime = Math.max(0, currentTime + seconds);
+    const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
+    setCurrentTime(newTime);
     sendPlayerCommand('seekTo', [newTime, true]);
   };
 
-  const handleSeek = (value: number[]) => {
+  const handleSeekStart = () => {
+    setIsDragging(true);
+  };
+
+  const handleSeekChange = (value: number[]) => {
     const newTime = value[0];
+    setCurrentTime(newTime);
+  };
+
+  const handleSeekEnd = (value: number[]) => {
+    const newTime = value[0];
+    setIsDragging(false);
+    
     if (!videoId || !playerReady) return;
     
     sendPlayerCommand('seekTo', [newTime, true]);
+    
+    // Request current time after seeking to sync
+    setTimeout(() => {
+      requestCurrentTime();
+    }, 100);
   };
 
   const handleVolumeChange = (value: number[]) => {
@@ -163,8 +255,13 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
 
   const formatTime = (time: number) => {
     if (!time || isNaN(time)) return '0:00';
-    const minutes = Math.floor(time / 60);
+    const hours = Math.floor(time / 3600);
+    const minutes = Math.floor((time % 3600) / 60);
     const seconds = Math.floor(time % 60);
+    
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
@@ -197,6 +294,11 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
             <Badge variant="outline" className="border-red-400/50 text-red-300">
               YouTube Audio
             </Badge>
+            {lastPlayedPosition > 0 && (
+              <Badge variant="outline" className="border-bible-gold/50 text-bible-gold">
+                Resume at {formatTime(lastPlayedPosition)}
+              </Badge>
+            )}
           </div>
         </div>
         <Button
@@ -246,8 +348,15 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
                 value={[currentTime]}
                 max={duration}
                 step={1}
-                onValueChange={handleSeek}
-                className="w-full"
+                onValueChange={handleSeekChange}
+                onPointerDown={handleSeekStart}
+                onPointerUp={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const percent = (e.clientX - rect.left) / rect.width;
+                  const newTime = Math.max(0, Math.min(duration, percent * duration));
+                  handleSeekEnd([newTime]);
+                }}
+                className="w-full cursor-pointer"
                 disabled={!playerReady || error !== ''}
               />
               <div className="flex justify-between text-xs text-white/60">
@@ -262,12 +371,12 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => skipTime(-5)}
+              onClick={() => skipTime(-10)}
               className="text-white hover:bg-white/20"
               disabled={!playerReady || error !== ''}
             >
               <SkipBack className="h-4 w-4" />
-              <span className="text-xs ml-1">5s</span>
+              <span className="text-xs ml-1">10s</span>
             </Button>
 
             <Button
@@ -287,11 +396,11 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => skipTime(5)}
+              onClick={() => skipTime(10)}
               className="text-white hover:bg-white/20"
               disabled={!playerReady || error !== ''}
             >
-              <span className="text-xs mr-1">5s</span>
+              <span className="text-xs mr-1">10s</span>
               <SkipForward className="h-4 w-4" />
             </Button>
           </div>
