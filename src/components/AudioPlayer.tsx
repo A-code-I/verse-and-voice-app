@@ -64,16 +64,17 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
         const position = parseFloat(savedPosition);
         setLastPlayedPosition(position);
         setCurrentTime(position);
+        console.log(`Loaded saved position: ${position}s for video ${videoId}`);
       }
     }
   }, [videoId]);
 
   // Save current position to localStorage periodically
   useEffect(() => {
-    if (videoId && currentTime > 0 && !isDragging) {
+    if (videoId && currentTime > 0 && !isDragging && isPlaying) {
       localStorage.setItem(`sermon-position-${videoId}`, currentTime.toString());
     }
-  }, [videoId, currentTime, isDragging]);
+  }, [videoId, currentTime, isDragging, isPlaying]);
 
   // Reset player when sermon changes
   useEffect(() => {
@@ -96,10 +97,10 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   useEffect(() => {
     if (isPlaying && playerReady && !isDragging) {
       progressUpdateInterval.current = setInterval(() => {
-        requestCurrentTime();
+        sendPlayerCommand('getCurrentTime');
         // Also request duration periodically in case it wasn't set initially
         if (duration === 0) {
-          requestDuration();
+          sendPlayerCommand('getDuration');
         }
       }, 1000);
     } else {
@@ -148,15 +149,25 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
           setPlayerReady(true);
           setError('');
           
-          // Set volume and seek to last position
+          // Set volume and seek to last position after player is ready
           setTimeout(() => {
             sendPlayerCommand('setVolume', [volume]);
+            sendPlayerCommand('getDuration');
             if (lastPlayedPosition > 0) {
+              console.log(`Seeking to saved position: ${lastPlayedPosition}s`);
               sendPlayerCommand('seekTo', [lastPlayedPosition, true]);
             }
-            requestCurrentTime();
-            requestDuration();
-          }, 500);
+          }, 1000);
+        } else if (data.event === 'infoDelivery') {
+          // Handle responses from getCurrentTime and getDuration
+          if (data.info && typeof data.info.currentTime === 'number') {
+            if (!isDragging) {
+              setCurrentTime(data.info.currentTime);
+            }
+          }
+          if (data.info && typeof data.info.duration === 'number' && data.info.duration > 0) {
+            setDuration(data.info.duration);
+          }
         }
       } catch (error) {
         console.log('Error parsing YouTube message:', error);
@@ -170,7 +181,6 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   const sendPlayerCommand = (command: string, args?: any[]) => {
     if (!videoId || !iframeRef.current || !playerReady) {
       console.log('Cannot send command - player not ready:', { videoId: !!videoId, iframe: !!iframeRef.current, playerReady });
-      setError('Player not ready');
       return false;
     }
 
@@ -188,14 +198,6 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       setError('Failed to control playback');
       return false;
     }
-  };
-
-  const requestCurrentTime = () => {
-    sendPlayerCommand('getCurrentTime');
-  };
-
-  const requestDuration = () => {
-    sendPlayerCommand('getDuration');
   };
 
   const togglePlayPause = () => {
@@ -237,12 +239,13 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     
     if (!videoId || !playerReady) return;
     
+    console.log(`Seeking to: ${newTime}s`);
     sendPlayerCommand('seekTo', [newTime, true]);
     
     // Request current time after seeking to sync
     setTimeout(() => {
-      requestCurrentTime();
-    }, 100);
+      sendPlayerCommand('getCurrentTime');
+    }, 500);
   };
 
   const handleVolumeChange = (value: number[]) => {
