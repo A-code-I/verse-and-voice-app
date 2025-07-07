@@ -23,7 +23,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [lastPlayedPosition, setLastPlayedPosition] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const progressUpdateInterval = useRef<NodeJS.Timeout | null>(null);
+  const playerRef = useRef<any>(null);
 
   // More flexible YouTube video ID extraction including live streams
   const getYouTubeVideoId = (url: string): string | null => {
@@ -36,7 +36,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       /(?:youtube\.com\/v\/)([^&\n?#]+)/,
       /(?:youtu\.be\/)([^&\n?#]+)/,
       /(?:youtube\.com\/.*[?&]v=)([^&\n?#]+)/,
-      /(?:youtube\.com\/live\/)([^&\n?#]+)/  // Added support for live streams
+      /(?:youtube\.com\/live\/)([^&\n?#]+)/
     ];
     
     for (const pattern of patterns) {
@@ -55,6 +55,20 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   };
 
   const videoId = sermon.youtube_url ? getYouTubeVideoId(sermon.youtube_url) : null;
+
+  // Load YouTube IFrame API
+  useEffect(() => {
+    if (!window.YT) {
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      const firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+      
+      window.onYouTubeIframeAPIReady = () => {
+        console.log('YouTube IFrame API Ready');
+      };
+    }
+  }, []);
 
   // Load last played position from localStorage
   useEffect(() => {
@@ -76,6 +90,112 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     }
   }, [videoId, currentTime, isDragging, isPlaying]);
 
+  // Initialize YouTube player when API is ready
+  useEffect(() => {
+    if (!videoId || !window.YT?.Player) return;
+
+    const initializePlayer = () => {
+      if (playerRef.current) {
+        playerRef.current.destroy();
+      }
+
+      playerRef.current = new window.YT.Player('youtube-player', {
+        height: '0',
+        width: '0',
+        videoId: videoId,
+        playerVars: {
+          autoplay: 0,
+          controls: 0,
+          disablekb: 1,
+          enablejsapi: 1,
+          fs: 0,
+          modestbranding: 1,
+          rel: 0,
+          showinfo: 0,
+          origin: window.location.origin
+        },
+        events: {
+          onReady: (event: any) => {
+            console.log('YouTube player ready');
+            setPlayerReady(true);
+            setError('');
+            
+            // Set initial volume
+            event.target.setVolume(volume);
+            
+            // Get duration
+            const videoDuration = event.target.getDuration();
+            if (videoDuration > 0) {
+              setDuration(videoDuration);
+              console.log('Video duration:', videoDuration);
+            }
+            
+            // Seek to saved position if exists
+            if (lastPlayedPosition > 0) {
+              console.log(`Seeking to saved position: ${lastPlayedPosition}s`);
+              event.target.seekTo(lastPlayedPosition, true);
+            }
+            
+            // Start time tracking
+            const timeUpdateInterval = setInterval(() => {
+              if (!isDragging && playerRef.current) {
+                const currentVideoTime = playerRef.current.getCurrentTime();
+                const videoDur = playerRef.current.getDuration();
+                
+                if (currentVideoTime !== undefined && currentVideoTime >= 0) {
+                  setCurrentTime(currentVideoTime);
+                }
+                
+                if (videoDur > 0 && videoDur !== duration) {
+                  setDuration(videoDur);
+                }
+              }
+            }, 1000);
+            
+            // Store interval reference for cleanup
+            playerRef.current.timeUpdateInterval = timeUpdateInterval;
+          },
+          onStateChange: (event: any) => {
+            const state = event.data;
+            console.log('Player state changed:', state);
+            
+            // YouTube player states: -1 (unstarted), 0 (ended), 1 (playing), 2 (paused), 3 (buffering), 5 (cued)
+            setIsPlaying(state === 1);
+            setLoading(state === 3);
+            
+            // Handle video end
+            if (state === 0) {
+              setCurrentTime(0);
+              if (videoId) {
+                localStorage.removeItem(`sermon-position-${videoId}`);
+              }
+            }
+          },
+          onError: (event: any) => {
+            console.error('YouTube player error:', event.data);
+            setError('Failed to load video');
+            setPlayerReady(false);
+          }
+        }
+      });
+    };
+
+    if (window.YT?.Player) {
+      initializePlayer();
+    } else {
+      window.onYouTubeIframeAPIReady = initializePlayer;
+    }
+
+    return () => {
+      if (playerRef.current?.timeUpdateInterval) {
+        clearInterval(playerRef.current.timeUpdateInterval);
+      }
+      if (playerRef.current?.destroy) {
+        playerRef.current.destroy();
+      }
+    };
+  }, [videoId, lastPlayedPosition, volume, isDragging, duration]);
+
   // Reset player when sermon changes
   useEffect(() => {
     setIsPlaying(false);
@@ -85,158 +205,31 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     setLoading(false);
     setPlayerReady(false);
     setIsDragging(false);
-    
-    // Clear progress interval
-    if (progressUpdateInterval.current) {
-      clearInterval(progressUpdateInterval.current);
-      progressUpdateInterval.current = null;
-    }
   }, [sermon.id]);
 
-  // Start progress tracking when playing
-  useEffect(() => {
-    if (isPlaying && playerReady && !isDragging) {
-      progressUpdateInterval.current = setInterval(() => {
-        // Request current time and duration from YouTube player
-        if (iframeRef.current?.contentWindow) {
-          iframeRef.current.contentWindow.postMessage('{"event":"command","func":"getCurrentTime","args":[]}', '*');
-          if (duration === 0) {
-            iframeRef.current.contentWindow.postMessage('{"event":"command","func":"getDuration","args":[]}', '*');
-          }
-        }
-      }, 1000);
-    } else {
-      if (progressUpdateInterval.current) {
-        clearInterval(progressUpdateInterval.current);
-        progressUpdateInterval.current = null;
-      }
-    }
-
-    return () => {
-      if (progressUpdateInterval.current) {
-        clearInterval(progressUpdateInterval.current);
-      }
-    };
-  }, [isPlaying, playerReady, isDragging, duration]);
-
-  // Listen for YouTube player events
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== 'https://www.youtube.com') return;
-      
-      try {
-        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-        console.log('YouTube player message:', data);
-        
-        if (data.event === 'video-progress') {
-          if (!isDragging && typeof data.info?.currentTime === 'number') {
-            setCurrentTime(data.info.currentTime);
-          }
-          if (typeof data.info?.duration === 'number' && data.info.duration > 0) {
-            setDuration(data.info.duration);
-          }
-        } else if (data.event === 'onStateChange') {
-          console.log('Player state changed:', data.info);
-          const state = typeof data.info === 'number' ? data.info : data.info?.playerState;
-          
-          // YouTube player state: -1 (unstarted), 0 (ended), 1 (playing), 2 (paused), 3 (buffering), 5 (cued)
-          setIsPlaying(state === 1);
-          setLoading(state === 3);
-          
-          // Handle video end
-          if (state === 0) {
-            setCurrentTime(0);
-            if (videoId) {
-              localStorage.removeItem(`sermon-position-${videoId}`);
-            }
-          }
-        } else if (data.event === 'onReady') {
-          console.log('YouTube player ready');
-          setPlayerReady(true);
-          setError('');
-          
-          // Initialize player after it's ready
-          setTimeout(() => {
-            if (iframeRef.current?.contentWindow) {
-              // Set volume
-              iframeRef.current.contentWindow.postMessage(`{"event":"command","func":"setVolume","args":[${volume}]}`, '*');
-              
-              // Get duration
-              iframeRef.current.contentWindow.postMessage('{"event":"command","func":"getDuration","args":[]}', '*');
-              
-              // Seek to saved position if exists
-              if (lastPlayedPosition > 0) {
-                console.log(`Seeking to saved position: ${lastPlayedPosition}s`);
-                iframeRef.current.contentWindow.postMessage(`{"event":"command","func":"seekTo","args":[${lastPlayedPosition},true]}`, '*');
-              }
-            }
-          }, 1500);
-        } else if (data.event === 'infoDelivery') {
-          // Handle direct responses to our commands
-          if (typeof data.info === 'number') {
-            // This is likely a response to getCurrentTime or getDuration
-            if (data.info > 100) {
-              // Likely duration (usually much larger than current time)
-              setDuration(data.info);
-            } else if (!isDragging) {
-              // Likely current time
-              setCurrentTime(data.info);
-            }
-          }
-        }
-      } catch (error) {
-        console.log('Error parsing YouTube message:', error);
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [isDragging, lastPlayedPosition, volume, videoId]);
-
-  const sendPlayerCommand = (command: string, args?: any[]) => {
-    if (!videoId || !iframeRef.current?.contentWindow || !playerReady) {
-      console.log('Cannot send command - player not ready:', { videoId: !!videoId, iframe: !!iframeRef.current, playerReady });
-      return false;
-    }
-
-    try {
-      const message = JSON.stringify({
-        event: 'command',
-        func: command,
-        args: args || []
-      });
-      console.log('Sending YouTube command:', message);
-      iframeRef.current.contentWindow.postMessage(message, '*');
-      return true;
-    } catch (error) {
-      console.error('Error sending YouTube command:', error);
-      setError('Failed to control playback');
-      return false;
-    }
-  };
-
   const togglePlayPause = () => {
-    if (!videoId) {
-      setError('Invalid YouTube URL');
+    if (!videoId || !playerRef.current) {
+      setError('Player not ready');
       return;
     }
 
     setError('');
+    console.log('Toggle play/pause, current state:', isPlaying);
     
     if (isPlaying) {
-      sendPlayerCommand('pauseVideo');
+      playerRef.current.pauseVideo();
     } else {
-      sendPlayerCommand('playVideo');
+      playerRef.current.playVideo();
     }
   };
 
   const skipTime = (seconds: number) => {
-    if (!videoId || !playerReady) return;
+    if (!videoId || !playerRef.current || !playerReady) return;
     
-    const maxTime = duration > 0 ? duration : currentTime + Math.abs(seconds) + 60;
-    const newTime = Math.max(0, Math.min(maxTime, currentTime + seconds));
+    const newTime = Math.max(0, Math.min(duration || currentTime + Math.abs(seconds), currentTime + seconds));
+    console.log(`Skipping to: ${newTime}s`);
     setCurrentTime(newTime);
-    sendPlayerCommand('seekTo', [newTime, true]);
+    playerRef.current.seekTo(newTime, true);
   };
 
   const handleSeekStart = () => {
@@ -252,23 +245,18 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     const newTime = value[0];
     setIsDragging(false);
     
-    if (!videoId || !playerReady) return;
+    if (!videoId || !playerRef.current || !playerReady) return;
     
     console.log(`Seeking to: ${newTime}s`);
-    sendPlayerCommand('seekTo', [newTime, true]);
-    
-    // Request current time after seeking to sync
-    setTimeout(() => {
-      if (iframeRef.current?.contentWindow) {
-        iframeRef.current.contentWindow.postMessage('{"event":"command","func":"getCurrentTime","args":[]}', '*');
-      }
-    }, 500);
+    playerRef.current.seekTo(newTime, true);
   };
 
   const handleVolumeChange = (value: number[]) => {
     const newVolume = value[0];
     setVolume(newVolume);
-    sendPlayerCommand('setVolume', [newVolume]);
+    if (playerRef.current && playerReady) {
+      playerRef.current.setVolume(newVolume);
+    }
   };
 
   const handleLikeClick = () => {
@@ -370,14 +358,14 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
           <div className="space-y-2">
             <Slider
               value={[currentTime]}
-              max={duration > 0 ? duration : Math.max(currentTime + 300, 1800)} // Use actual duration or reasonable default
+              max={duration > 0 ? duration : 100}
               step={1}
               onValueChange={handleSeekChange}
               onPointerDown={handleSeekStart}
               onPointerUp={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 const percent = (e.clientX - rect.left) / rect.width;
-                const maxTime = duration > 0 ? duration : Math.max(currentTime + 300, 1800);
+                const maxTime = duration > 0 ? duration : 100;
                 const newTime = Math.max(0, Math.min(maxTime, percent * maxTime));
                 handleSeekEnd([newTime]);
               }}
@@ -444,24 +432,8 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
           </div>
         </div>
 
-        {/* Hidden YouTube iframe for audio playback */}
-        <div className="absolute top-0 left-0 w-0 h-0 overflow-hidden opacity-0 pointer-events-none">
-          <iframe
-            ref={iframeRef}
-            src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&autoplay=0&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&showinfo=0&mute=0&loop=0&origin=${encodeURIComponent(window.location.origin)}`}
-            title={`${sermon.title} - Audio`}
-            className="w-full h-full"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            onLoad={() => {
-              console.log('YouTube iframe loaded');
-              // Give the player some time to initialize
-              setTimeout(() => {
-                console.log('Setting player ready to true');
-                setPlayerReady(true);
-              }, 2000);
-            }}
-          />
-        </div>
+        {/* Hidden YouTube player container */}
+        <div id="youtube-player" style={{ display: 'none' }}></div>
       </div>
 
       <div className="mt-6">
