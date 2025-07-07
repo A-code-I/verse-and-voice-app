@@ -97,10 +97,12 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   useEffect(() => {
     if (isPlaying && playerReady && !isDragging) {
       progressUpdateInterval.current = setInterval(() => {
-        sendPlayerCommand('getCurrentTime');
-        // Also request duration periodically in case it wasn't set initially
-        if (duration === 0) {
-          sendPlayerCommand('getDuration');
+        // Request current time and duration from YouTube player
+        if (iframeRef.current?.contentWindow) {
+          iframeRef.current.contentWindow.postMessage('{"event":"command","func":"getCurrentTime","args":[]}', '*');
+          if (duration === 0) {
+            iframeRef.current.contentWindow.postMessage('{"event":"command","func":"getDuration","args":[]}', '*');
+          }
         }
       }, 1000);
     } else {
@@ -123,50 +125,63 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       if (event.origin !== 'https://www.youtube.com') return;
       
       try {
-        const data = JSON.parse(event.data);
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
         console.log('YouTube player message:', data);
         
         if (data.event === 'video-progress') {
-          if (!isDragging) {
-            setCurrentTime(data.info.currentTime || 0);
+          if (!isDragging && typeof data.info?.currentTime === 'number') {
+            setCurrentTime(data.info.currentTime);
           }
-          if (data.info.duration && data.info.duration > 0) {
+          if (typeof data.info?.duration === 'number' && data.info.duration > 0) {
             setDuration(data.info.duration);
           }
         } else if (data.event === 'onStateChange') {
-          // YouTube player state: -1 (unstarted), 0 (ended), 1 (playing), 2 (paused), 3 (buffering), 5 (cued)
           console.log('Player state changed:', data.info);
-          setIsPlaying(data.info === 1);
-          setLoading(data.info === 3);
+          const state = typeof data.info === 'number' ? data.info : data.info?.playerState;
+          
+          // YouTube player state: -1 (unstarted), 0 (ended), 1 (playing), 2 (paused), 3 (buffering), 5 (cued)
+          setIsPlaying(state === 1);
+          setLoading(state === 3);
           
           // Handle video end
-          if (data.info === 0) {
+          if (state === 0) {
             setCurrentTime(0);
-            localStorage.removeItem(`sermon-position-${videoId}`);
+            if (videoId) {
+              localStorage.removeItem(`sermon-position-${videoId}`);
+            }
           }
         } else if (data.event === 'onReady') {
           console.log('YouTube player ready');
           setPlayerReady(true);
           setError('');
           
-          // Set volume and seek to last position after player is ready
+          // Initialize player after it's ready
           setTimeout(() => {
-            sendPlayerCommand('setVolume', [volume]);
-            sendPlayerCommand('getDuration');
-            if (lastPlayedPosition > 0) {
-              console.log(`Seeking to saved position: ${lastPlayedPosition}s`);
-              sendPlayerCommand('seekTo', [lastPlayedPosition, true]);
+            if (iframeRef.current?.contentWindow) {
+              // Set volume
+              iframeRef.current.contentWindow.postMessage(`{"event":"command","func":"setVolume","args":[${volume}]}`, '*');
+              
+              // Get duration
+              iframeRef.current.contentWindow.postMessage('{"event":"command","func":"getDuration","args":[]}', '*');
+              
+              // Seek to saved position if exists
+              if (lastPlayedPosition > 0) {
+                console.log(`Seeking to saved position: ${lastPlayedPosition}s`);
+                iframeRef.current.contentWindow.postMessage(`{"event":"command","func":"seekTo","args":[${lastPlayedPosition},true]}`, '*');
+              }
             }
-          }, 1000);
+          }, 1500);
         } else if (data.event === 'infoDelivery') {
-          // Handle responses from getCurrentTime and getDuration
-          if (data.info && typeof data.info.currentTime === 'number') {
-            if (!isDragging) {
-              setCurrentTime(data.info.currentTime);
+          // Handle direct responses to our commands
+          if (typeof data.info === 'number') {
+            // This is likely a response to getCurrentTime or getDuration
+            if (data.info > 100) {
+              // Likely duration (usually much larger than current time)
+              setDuration(data.info);
+            } else if (!isDragging) {
+              // Likely current time
+              setCurrentTime(data.info);
             }
-          }
-          if (data.info && typeof data.info.duration === 'number' && data.info.duration > 0) {
-            setDuration(data.info.duration);
           }
         }
       } catch (error) {
@@ -179,19 +194,19 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   }, [isDragging, lastPlayedPosition, volume, videoId]);
 
   const sendPlayerCommand = (command: string, args?: any[]) => {
-    if (!videoId || !iframeRef.current || !playerReady) {
+    if (!videoId || !iframeRef.current?.contentWindow || !playerReady) {
       console.log('Cannot send command - player not ready:', { videoId: !!videoId, iframe: !!iframeRef.current, playerReady });
       return false;
     }
 
     try {
-      const message = {
+      const message = JSON.stringify({
         event: 'command',
         func: command,
         args: args || []
-      };
+      });
       console.log('Sending YouTube command:', message);
-      iframeRef.current.contentWindow?.postMessage(JSON.stringify(message), '*');
+      iframeRef.current.contentWindow.postMessage(message, '*');
       return true;
     } catch (error) {
       console.error('Error sending YouTube command:', error);
@@ -218,7 +233,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   const skipTime = (seconds: number) => {
     if (!videoId || !playerReady) return;
     
-    const maxTime = duration > 0 ? duration : 3600; // Default to 1 hour if duration unknown
+    const maxTime = duration > 0 ? duration : currentTime + Math.abs(seconds) + 60;
     const newTime = Math.max(0, Math.min(maxTime, currentTime + seconds));
     setCurrentTime(newTime);
     sendPlayerCommand('seekTo', [newTime, true]);
@@ -244,7 +259,9 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     
     // Request current time after seeking to sync
     setTimeout(() => {
-      sendPlayerCommand('getCurrentTime');
+      if (iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage('{"event":"command","func":"getCurrentTime","args":[]}', '*');
+      }
     }, 500);
   };
 
@@ -349,18 +366,18 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
 
         {/* Audio Controls */}
         <div className="space-y-4">
-          {/* Time Slider - Always visible */}
+          {/* Time Slider */}
           <div className="space-y-2">
             <Slider
               value={[currentTime]}
-              max={duration > 0 ? duration : 3600} // Default to 1 hour if duration unknown
+              max={duration > 0 ? duration : Math.max(currentTime + 300, 1800)} // Use actual duration or reasonable default
               step={1}
               onValueChange={handleSeekChange}
               onPointerDown={handleSeekStart}
               onPointerUp={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 const percent = (e.clientX - rect.left) / rect.width;
-                const maxTime = duration > 0 ? duration : 3600;
+                const maxTime = duration > 0 ? duration : Math.max(currentTime + 300, 1800);
                 const newTime = Math.max(0, Math.min(maxTime, percent * maxTime));
                 handleSeekEnd([newTime]);
               }}
@@ -438,7 +455,10 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
             onLoad={() => {
               console.log('YouTube iframe loaded');
               // Give the player some time to initialize
-              setTimeout(() => setPlayerReady(true), 1000);
+              setTimeout(() => {
+                console.log('Setting player ready to true');
+                setPlayerReady(true);
+              }, 2000);
             }}
           />
         </div>
