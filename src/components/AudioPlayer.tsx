@@ -97,6 +97,10 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     if (isPlaying && playerReady && !isDragging) {
       progressUpdateInterval.current = setInterval(() => {
         requestCurrentTime();
+        // Also request duration periodically in case it wasn't set initially
+        if (duration === 0) {
+          requestDuration();
+        }
       }, 1000);
     } else {
       if (progressUpdateInterval.current) {
@@ -110,7 +114,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
         clearInterval(progressUpdateInterval.current);
       }
     };
-  }, [isPlaying, playerReady, isDragging]);
+  }, [isPlaying, playerReady, isDragging, duration]);
 
   // Listen for YouTube player events
   useEffect(() => {
@@ -125,7 +129,9 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
           if (!isDragging) {
             setCurrentTime(data.info.currentTime || 0);
           }
-          setDuration(data.info.duration || 0);
+          if (data.info.duration && data.info.duration > 0) {
+            setDuration(data.info.duration);
+          }
         } else if (data.event === 'onStateChange') {
           // YouTube player state: -1 (unstarted), 0 (ended), 1 (playing), 2 (paused), 3 (buffering), 5 (cued)
           console.log('Player state changed:', data.info);
@@ -210,7 +216,8 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   const skipTime = (seconds: number) => {
     if (!videoId || !playerReady) return;
     
-    const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
+    const maxTime = duration > 0 ? duration : 3600; // Default to 1 hour if duration unknown
+    const newTime = Math.max(0, Math.min(maxTime, currentTime + seconds));
     setCurrentTime(newTime);
     sendPlayerCommand('seekTo', [newTime, true]);
   };
@@ -325,11 +332,9 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
             <p className="text-sm text-white/70">
               {playerReady ? 'Audio Only Mode' : 'Loading Player...'}
             </p>
-            {duration > 0 && (
-              <p className="text-xs text-white/50 mt-2">
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </p>
-            )}
+            <p className="text-xs text-white/50 mt-2">
+              {formatTime(currentTime)} {duration > 0 ? `/ ${formatTime(duration)}` : ''}
+            </p>
           </div>
         </div>
 
@@ -341,30 +346,29 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
 
         {/* Audio Controls */}
         <div className="space-y-4">
-          {/* Time Slider */}
-          {duration > 0 && (
-            <div className="space-y-2">
-              <Slider
-                value={[currentTime]}
-                max={duration}
-                step={1}
-                onValueChange={handleSeekChange}
-                onPointerDown={handleSeekStart}
-                onPointerUp={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const percent = (e.clientX - rect.left) / rect.width;
-                  const newTime = Math.max(0, Math.min(duration, percent * duration));
-                  handleSeekEnd([newTime]);
-                }}
-                className="w-full cursor-pointer"
-                disabled={!playerReady || error !== ''}
-              />
-              <div className="flex justify-between text-xs text-white/60">
-                <span>{formatTime(currentTime)}</span>
-                <span>{formatTime(duration)}</span>
-              </div>
+          {/* Time Slider - Always visible */}
+          <div className="space-y-2">
+            <Slider
+              value={[currentTime]}
+              max={duration > 0 ? duration : 3600} // Default to 1 hour if duration unknown
+              step={1}
+              onValueChange={handleSeekChange}
+              onPointerDown={handleSeekStart}
+              onPointerUp={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const percent = (e.clientX - rect.left) / rect.width;
+                const maxTime = duration > 0 ? duration : 3600;
+                const newTime = Math.max(0, Math.min(maxTime, percent * maxTime));
+                handleSeekEnd([newTime]);
+              }}
+              className="w-full cursor-pointer"
+              disabled={!playerReady || error !== ''}
+            />
+            <div className="flex justify-between text-xs text-white/60">
+              <span>{formatTime(currentTime)}</span>
+              <span>{duration > 0 ? formatTime(duration) : '--:--'}</span>
             </div>
-          )}
+          </div>
 
           {/* Control Buttons */}
           <div className="flex items-center justify-center gap-4">
