@@ -23,8 +23,10 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [lastPlayedPosition, setLastPlayedPosition] = useState(0);
   const [apiReady, setApiReady] = useState(false);
+  const [seekValue, setSeekValue] = useState(0);
   const playerRef = useRef<any>(null);
   const timeUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const seekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // More flexible YouTube video ID extraction
   const getYouTubeVideoId = (url: string): string | null => {
@@ -100,6 +102,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
         const position = parseFloat(savedPosition);
         setLastPlayedPosition(position);
         setCurrentTime(position);
+        setSeekValue(position);
         console.log(`Loaded saved position: ${position}s for video ${videoId}`);
       }
     }
@@ -190,7 +193,9 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
                     const videoDur = playerRef.current.getDuration();
                     
                     if (currentVideoTime !== undefined && currentVideoTime >= 0) {
-                      setCurrentTime(Math.floor(currentVideoTime * 10) / 10);
+                      const time = Math.floor(currentVideoTime * 10) / 10;
+                      setCurrentTime(time);
+                      setSeekValue(time);
                     }
                     
                     if (videoDur > 0 && Math.abs(videoDur - duration) > 1) {
@@ -217,6 +222,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               
               if (state === 0) { // ended
                 setCurrentTime(0);
+                setSeekValue(0);
                 if (videoId) {
                   localStorage.removeItem(`sermon-position-${videoId}`);
                 }
@@ -243,6 +249,9 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       if (timeUpdateIntervalRef.current) {
         clearTimeout(timeUpdateIntervalRef.current);
       }
+      if (seekTimeoutRef.current) {
+        clearTimeout(seekTimeoutRef.current);
+      }
       if (playerRef.current?.destroy) {
         try {
           playerRef.current.destroy();
@@ -257,6 +266,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   useEffect(() => {
     setIsPlaying(false);
     setCurrentTime(0);
+    setSeekValue(0);
     setDuration(0);
     setError('');
     setLoading(false);
@@ -287,6 +297,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     const newTime = Math.max(0, Math.min(duration || currentTime + Math.abs(seconds), currentTime + seconds));
     console.log(`Skipping to: ${newTime}s`);
     setCurrentTime(newTime);
+    setSeekValue(newTime);
     playerRef.current.seekTo(newTime, true);
   };
 
@@ -295,6 +306,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     
     console.log('Restarting from beginning');
     setCurrentTime(0);
+    setSeekValue(0);
     playerRef.current.seekTo(0, true);
     
     // Clear saved position
@@ -304,29 +316,31 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     }
   };
 
-  const handleSeekStart = () => {
-    console.log('Seek started');
-    setIsDragging(true);
-  };
-
   const handleSeekChange = (value: number[]) => {
     const newTime = value[0];
     console.log('Seek change:', newTime);
-    setCurrentTime(newTime);
-  };
-
-  const handleSeekEnd = (value: number[]) => {
-    const newTime = value[0];
-    console.log('Seek ended at:', newTime);
-    setIsDragging(false);
     
-    if (!videoId || !playerRef.current || !playerReady) {
-      console.warn('Cannot seek: player not ready');
-      return;
+    // Set dragging state and update seek value immediately for smooth UI
+    if (!isDragging) {
+      setIsDragging(true);
     }
     
-    console.log(`Seeking to: ${newTime}s`);
-    playerRef.current.seekTo(newTime, true);
+    setSeekValue(newTime);
+    
+    // Clear any existing timeout
+    if (seekTimeoutRef.current) {
+      clearTimeout(seekTimeoutRef.current);
+    }
+    
+    // Debounce the actual seek operation
+    seekTimeoutRef.current = setTimeout(() => {
+      if (playerRef.current && playerReady) {
+        console.log(`Seeking to: ${newTime}s`);
+        playerRef.current.seekTo(newTime, true);
+        setCurrentTime(newTime);
+      }
+      setIsDragging(false);
+    }, 300); // 300ms debounce
   };
 
   const handleVolumeChange = (value: number[]) => {
@@ -424,7 +438,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               {!apiReady ? 'Loading API...' : playerReady ? 'Audio Only Mode' : 'Loading Player...'}
             </p>
             <p className="text-xs text-white/50 mt-2">
-              {formatTime(currentTime)} {duration > 0 ? `/ ${formatTime(duration)}` : ''}
+              {formatTime(isDragging ? seekValue : currentTime)} {duration > 0 ? `/ ${formatTime(duration)}` : ''}
             </p>
           </div>
         </div>
@@ -440,17 +454,15 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
           {/* Time Slider */}
           <div className="space-y-2">
             <Slider
-              value={[currentTime]}
+              value={[isDragging ? seekValue : currentTime]}
               max={duration > 0 ? duration : 100}
               step={1}
-              onValueChangeStart={handleSeekStart}
               onValueChange={handleSeekChange}
-              onValueChangeEnd={handleSeekEnd}
               className="w-full cursor-pointer"
               disabled={!playerReady || error !== ''}
             />
             <div className="flex justify-between text-xs text-white/60">
-              <span>{formatTime(currentTime)}</span>
+              <span>{formatTime(isDragging ? seekValue : currentTime)}</span>
               <span>{duration > 0 ? formatTime(duration) : '--:--'}</span>
             </div>
           </div>

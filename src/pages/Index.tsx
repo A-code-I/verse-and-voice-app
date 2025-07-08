@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -348,7 +347,7 @@ const Index = () => {
           <div className="flex justify-between items-center mb-6">
             <div></div>
             <h1 className="text-5xl font-bible font-bold text-white animate-fade-in">
-              Living Word
+              Word from Living God
             </h1>
             <div className="flex gap-2">
               <Button 
