@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
-import { Heart, Play, Pause, SkipBack, SkipForward, Volume2 } from "lucide-react";
+import { Heart, Play, Pause, SkipBack, SkipForward, Volume2, RotateCcw } from "lucide-react";
 import { Sermon } from '@/pages/Index';
 import SermonDetails from './SermonDetails';
 
@@ -22,14 +22,13 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   const [playerReady, setPlayerReady] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [lastPlayedPosition, setLastPlayedPosition] = useState(0);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<any>(null);
+  const timeUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // More flexible YouTube video ID extraction including live streams
+  // More flexible YouTube video ID extraction
   const getYouTubeVideoId = (url: string): string | null => {
     if (!url || typeof url !== 'string') return null;
     
-    // Handle various YouTube URL formats including live streams
     const patterns = [
       /(?:youtube\.com\/watch\?v=)([^&\n?#]+)/,
       /(?:youtube\.com\/embed\/)([^&\n?#]+)/,
@@ -46,7 +45,6 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       }
     }
     
-    // If it looks like a video ID itself (11 characters)
     if (url.length === 11 && /^[a-zA-Z0-9_-]+$/.test(url)) {
       return url;
     }
@@ -83,19 +81,28 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     }
   }, [videoId]);
 
-  // Save current position to localStorage periodically
+  // Save current position to localStorage with improved performance
   useEffect(() => {
     if (videoId && currentTime > 0 && !isDragging && isPlaying) {
-      localStorage.setItem(`sermon-position-${videoId}`, currentTime.toString());
+      const savePosition = () => {
+        localStorage.setItem(`sermon-position-${videoId}`, currentTime.toString());
+      };
+      
+      // Debounce the save operation
+      const timeoutId = setTimeout(savePosition, 2000);
+      return () => clearTimeout(timeoutId);
     }
   }, [videoId, currentTime, isDragging, isPlaying]);
 
-  // Initialize YouTube player when API is ready
+  // Initialize YouTube player with improved performance
   useEffect(() => {
     if (!videoId || !window.YT?.Player) return;
 
     const initializePlayer = () => {
       if (playerRef.current) {
+        if (timeUpdateIntervalRef.current) {
+          clearInterval(timeUpdateIntervalRef.current);
+        }
         playerRef.current.destroy();
       }
 
@@ -120,10 +127,8 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
             setPlayerReady(true);
             setError('');
             
-            // Set initial volume
             event.target.setVolume(volume);
             
-            // Get duration
             const videoDuration = event.target.getDuration();
             if (videoDuration > 0) {
               setDuration(videoDuration);
@@ -136,35 +141,40 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               event.target.seekTo(lastPlayedPosition, true);
             }
             
-            // Start time tracking
-            const timeUpdateInterval = setInterval(() => {
+            // Optimized time tracking with requestAnimationFrame
+            const updateTime = () => {
               if (!isDragging && playerRef.current) {
-                const currentVideoTime = playerRef.current.getCurrentTime();
-                const videoDur = playerRef.current.getDuration();
-                
-                if (currentVideoTime !== undefined && currentVideoTime >= 0) {
-                  setCurrentTime(currentVideoTime);
-                }
-                
-                if (videoDur > 0 && videoDur !== duration) {
-                  setDuration(videoDur);
+                try {
+                  const currentVideoTime = playerRef.current.getCurrentTime();
+                  const videoDur = playerRef.current.getDuration();
+                  
+                  if (currentVideoTime !== undefined && currentVideoTime >= 0) {
+                    setCurrentTime(Math.floor(currentVideoTime * 10) / 10); // Round to 1 decimal
+                  }
+                  
+                  if (videoDur > 0 && Math.abs(videoDur - duration) > 1) {
+                    setDuration(videoDur);
+                  }
+                } catch (error) {
+                  console.warn('Error updating time:', error);
                 }
               }
-            }, 1000);
+              
+              if (playerRef.current) {
+                timeUpdateIntervalRef.current = setTimeout(updateTime, 500); // Update every 500ms for better performance
+              }
+            };
             
-            // Store interval reference for cleanup
-            playerRef.current.timeUpdateInterval = timeUpdateInterval;
+            updateTime();
           },
           onStateChange: (event: any) => {
             const state = event.data;
             console.log('Player state changed:', state);
             
-            // YouTube player states: -1 (unstarted), 0 (ended), 1 (playing), 2 (paused), 3 (buffering), 5 (cued)
             setIsPlaying(state === 1);
             setLoading(state === 3);
             
-            // Handle video end
-            if (state === 0) {
+            if (state === 0) { // ended
               setCurrentTime(0);
               if (videoId) {
                 localStorage.removeItem(`sermon-position-${videoId}`);
@@ -187,8 +197,8 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     }
 
     return () => {
-      if (playerRef.current?.timeUpdateInterval) {
-        clearInterval(playerRef.current.timeUpdateInterval);
+      if (timeUpdateIntervalRef.current) {
+        clearTimeout(timeUpdateIntervalRef.current);
       }
       if (playerRef.current?.destroy) {
         playerRef.current.destroy();
@@ -205,6 +215,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     setLoading(false);
     setPlayerReady(false);
     setIsDragging(false);
+    setLastPlayedPosition(0);
   }, [sermon.id]);
 
   const togglePlayPause = () => {
@@ -230,6 +241,20 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     console.log(`Skipping to: ${newTime}s`);
     setCurrentTime(newTime);
     playerRef.current.seekTo(newTime, true);
+  };
+
+  const restartFromBeginning = () => {
+    if (!videoId || !playerRef.current || !playerReady) return;
+    
+    console.log('Restarting from beginning');
+    setCurrentTime(0);
+    playerRef.current.seekTo(0, true);
+    
+    // Clear saved position
+    if (videoId) {
+      localStorage.removeItem(`sermon-position-${videoId}`);
+      setLastPlayedPosition(0);
+    }
   };
 
   const handleSeekStart = () => {
@@ -379,7 +404,18 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
           </div>
 
           {/* Control Buttons */}
-          <div className="flex items-center justify-center gap-4">
+          <div className="flex items-center justify-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={restartFromBeginning}
+              className="text-white hover:bg-white/20"
+              disabled={!playerReady || error !== ''}
+              title="Restart from beginning"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+
             <Button
               variant="ghost"
               size="sm"
