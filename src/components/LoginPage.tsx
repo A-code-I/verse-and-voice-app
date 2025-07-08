@@ -29,7 +29,7 @@ const LoginPage = ({ onLogin, onGoogleLogin, isLoading = false, error }: LoginPa
         {/* Header */}
         <header className="text-center mb-8">
           <h1 className="text-5xl font-bible font-bold text-white mb-4 animate-fade-in">
-            Living Word Ministry
+            Word from Living God
           </h1>
           <p className="text-xl text-white/80 animate-fade-in">
             Feeding souls with God's eternal truth
