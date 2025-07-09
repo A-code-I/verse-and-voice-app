@@ -29,7 +29,7 @@ const DailyVerse = () => {
 
   const today = format(new Date(), 'EEEE, MMMM dd, yyyy');
 
-  // Bible verses collection for random selection
+  // Expanded Bible verses collection for better daily variation
   const bibleVerses = [
     {
       verse: "For I know the plans I have for you, declares the Lord, plans to prosper you and not to harm you, to give you hope and a future.",
@@ -86,6 +86,90 @@ const DailyVerse = () => {
       chapter: "Zephaniah 3",
       book: "Zephaniah",
       teluguVerse: "నీ దేవుడైన యెహోవా నీ మధ్యను ఉండును; ఆయన రక్షణా శూరుడు; ఆయన నిన్ను బట్టి మిక్కిలి సంతోషించును; తన ప్రేమతో మౌనముగా ఉండును; నిన్ను బట్టి కీర్తనలతో ఆనందించును."
+    },
+    {
+      verse: "Cast all your anxiety on him because he cares for you.",
+      reference: "1 Peter 5:7",
+      chapter: "1 Peter 5",
+      book: "1 Peter",
+      teluguVerse: "ఆయన మిమ్మల్ని జాలిపడుచున్నాడు గనుక మీ చింతలన్నిటిని ఆయనపైకి వేయుడు."
+    },
+    {
+      verse: "But those who hope in the Lord will renew their strength. They will soar on wings like eagles; they will run and not grow weary, they will walk and not be faint.",
+      reference: "Isaiah 40:31",
+      chapter: "Isaiah 40",
+      book: "Isaiah",
+      teluguVerse: "యెహోవా కొరకు కనిపెట్టువారు తమ బలమును తిరిగి పొందుదురు; వారు గరుడలవలె రెక్కలు వేసుకొని ఎగురుదురు; పరుగెత్తినను అలుసు పడరు; నడిచినను సొమ్మసిల్లరు."
+    },
+    {
+      verse: "The Lord is close to the brokenhearted and saves those who are crushed in spirit.",
+      reference: "Psalm 34:18",
+      chapter: "Psalm 34",
+      book: "Psalms",
+      teluguVerse: "హృదయము విరుగుకొనినవారికి యెహోవా సమీపముగా ఉండును; మనోభంగము పొందినవారిని రక్షించును."
+    },
+    {
+      verse: "Have I not commanded you? Be strong and courageous. Do not be afraid; do not be discouraged, for the Lord your God will be with you wherever you go.",
+      reference: "Joshua 1:9",
+      chapter: "Joshua 1",
+      book: "Joshua",
+      teluguVerse: "నేను నీకు ఆజ్ఞాపించినది కాదా? బలవంతుడవై ధైర్యవంతుడవై యుండుము; భయపడకుము, కలవరపడకుము; ఎందుకంటే నీవు ఎచ్చట వెళ్లినను నీ దేవుడైన యెహోవా నీకు తోడుగా ఉండును."
+    },
+    {
+      verse: "Peace I leave with you; my peace I give you. I do not give to you as the world gives. Do not let your hearts be troubled and do not be afraid.",
+      reference: "John 14:27",
+      chapter: "John 14",
+      book: "John",
+      teluguVerse: "శాంతిని మీకు చెప్పి వెళ్లుచున్నాను; నా శాంతిని మీకు ఇచ్చుచున్నాను; లోకము ఇచ్చుటవలె నేను మీకు ఇవ్వను; మీ హృదయము కలవరపడనియ్యకుము, భయపడనియ్యకుము."
+    },
+    {
+      verse: "And my God will meet all your needs according to the riches of his glory in Christ Jesus.",
+      reference: "Philippians 4:19",
+      chapter: "Philippians 4",
+      book: "Philippians",
+      teluguVerse: "నా దేవుడు క్రీస్తు యేసులో తన మహిమా ఐశ్వర్యమును బట్టి మీ కావలసినవన్నిటిని తీర్చును."
+    },
+    {
+      verse: "Therefore do not worry about tomorrow, for tomorrow will worry about itself. Each day has enough trouble of its own.",
+      reference: "Matthew 6:34",
+      chapter: "Matthew 6",
+      book: "Matthew",
+      teluguVerse: "కాగా రేపటి గురించి చింతించకుడి; రేపు తనగురించి తానే చింతించుకొనును; ప్రతిదినమునకు దాని దు:ఖము చాలును."
+    },
+    {
+      verse: "Come to me, all you who are weary and burdened, and I will give you rest.",
+      reference: "Matthew 11:28",
+      chapter: "Matthew 11",
+      book: "Matthew",
+      teluguVerse: "కష్టపడి భారము మోయువారందరా, నా దగ్గరకు రండి; నేను మీకు విశ్రాంతి దయచేతును."
+    },
+    {
+      verse: "But seek first his kingdom and his righteousness, and all these things will be given to you as well.",
+      reference: "Matthew 6:33",
+      chapter: "Matthew 6",
+      book: "Matthew",
+      teluguVerse: "కాని మొదట దేవుని రాజ్యమును ఆయన నీతిని వెదకుడి; అప్పుడు ఇవన్నియు మీకు కలుగును."
+    },
+    {
+      verse: "For we walk by faith, not by sight.",
+      reference: "2 Corinthians 5:7",
+      chapter: "2 Corinthians 5",
+      book: "2 Corinthians",
+      teluguVerse: "మేము కనులతో కాక విశ్వాసముతో నడుచుచున్నాము."
+    },
+    {
+      verse: "The name of the Lord is a fortified tower; the righteous run to it and are safe.",
+      reference: "Proverbs 18:10",
+      chapter: "Proverbs 18",
+      book: "Proverbs",
+      teluguVerse: "యెహోవా నామమే దృఢమైన గోపురము; నీతిమంతులు దానిలోనికి పరుగెత్తి కపారపడుదురు."
+    },
+    {
+      verse: "Let us then approach God's throne of grace with confidence, so that we may receive mercy and find grace to help us in our time of need.",
+      reference: "Hebrews 4:16",
+      chapter: "Hebrews 4",
+      book: "Hebrews",
+      teluguVerse: "కాబట్టి మనము దయ పొందుటకును అవసరమైన సమయమందు సహాయపడు కృపను కనుగొనుటకును ధైర్యముతో కృప సింహాసనము దగ్గరకు వెళ్లుదము."
     }
   ];
 
@@ -97,8 +181,33 @@ const DailyVerse = () => {
     "https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?w=800&h=600&fit=crop",
     "https://images.unsplash.com/photo-1431794062232-2a99a5431c6c?w=800&h=600&fit=crop",
     "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop",
-    "https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=800&h=600&fit=crop"
+    "https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=800&h=600&fit=crop",
+    "https://images.unsplash.com/photo-1445263670085-85a8e5a3c2d0?w=800&h=600&fit=crop",
+    "https://images.unsplash.com/photo-1465189684280-6a8fa9b19a7a?w=800&h=600&fit=crop",
+    "https://images.unsplash.com/photo-1493246507139-91e8fad9978e?w=800&h=600&fit=crop",
+    "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=800&h=600&fit=crop"
   ];
+
+  // Get daily verse based on day of year for consistent daily rotation
+  const getDailyVerse = () => {
+    const today = new Date();
+    const startOfYear = new Date(today.getFullYear(), 0, 0);
+    const dayOfYear = Math.floor((today.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Use day of year to select verse consistently
+    const verseIndex = dayOfYear % bibleVerses.length;
+    const selectedVerse = bibleVerses[verseIndex];
+    
+    // Use a different calculation for images to ensure variety
+    const imageIndex1 = (dayOfYear * 3) % imagePool.length;
+    const imageIndex2 = (dayOfYear * 7) % imagePool.length;
+    
+    return {
+      ...selectedVerse,
+      verseImage: imagePool[imageIndex1],
+      teluguImage: imagePool[imageIndex2]
+    };
+  };
 
   const getRandomVerse = () => {
     const randomIndex = Math.floor(Math.random() * bibleVerses.length);
@@ -113,13 +222,13 @@ const DailyVerse = () => {
     };
   };
 
-  // Load random verse on component mount and daily
+  // Load daily verse on component mount
   useEffect(() => {
     const today = new Date().toDateString();
     const lastUpdate = localStorage.getItem('dailyVerseDate');
     
     if (lastUpdate !== today) {
-      const newVerse = getRandomVerse();
+      const newVerse = getDailyVerse();
       setVerseData(newVerse);
       localStorage.setItem('dailyVerseDate', today);
       localStorage.setItem('dailyVerseData', JSON.stringify(newVerse));
@@ -127,6 +236,11 @@ const DailyVerse = () => {
       const savedVerse = localStorage.getItem('dailyVerseData');
       if (savedVerse) {
         setVerseData(JSON.parse(savedVerse));
+      } else {
+        // Fallback if saved data is corrupted
+        const newVerse = getDailyVerse();
+        setVerseData(newVerse);
+        localStorage.setItem('dailyVerseData', JSON.stringify(newVerse));
       }
     }
   }, []);
