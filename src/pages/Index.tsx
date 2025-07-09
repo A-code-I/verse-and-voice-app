@@ -80,7 +80,6 @@ const Index = () => {
     'Topic Wise'
   ];
 
-  // Initialize auth
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
@@ -111,12 +110,10 @@ const Index = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch user profile with better error handling
   const fetchUserProfile = async (userId: string) => {
     try {
       console.log('Fetching profile for user:', userId);
       
-      // First, try to get the profile directly
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -126,7 +123,6 @@ const Index = () => {
       if (error) {
         console.error('Error fetching user profile:', error);
         
-        // If profile doesn't exist, create one
         if (error.code === 'PGRST116') {
           console.log('Profile not found, creating new profile');
           const { data: userData } = await supabase.auth.getUser();
@@ -141,7 +137,6 @@ const Index = () => {
               });
             
             if (!insertError) {
-              // Fetch the newly created profile
               const { data: newProfile } = await supabase
                 .from('profiles')
                 .select('*')
@@ -165,29 +160,58 @@ const Index = () => {
     }
   };
 
-  // Fetch sermons
   const fetchSermons = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: sermonsData, error: sermonsError } = await supabase
         .from('sermons')
         .select('*')
         .order('sermon_date', { ascending: false });
 
-      if (error) throw error;
-      setSermons(data || []);
+      if (sermonsError) throw sermonsError;
+
+      if (user) {
+        const { data: likesData, error: likesError } = await supabase
+          .from('user_sermon_likes')
+          .select('sermon_id')
+          .eq('user_id', user.id);
+
+        if (likesError) {
+          console.error('Error fetching likes:', likesError);
+        }
+
+        const likedSermonIds = new Set(likesData?.map(like => like.sermon_id) || []);
+
+        const sermonsWithLikes = sermonsData?.map(sermon => ({
+          ...sermon,
+          liked: likedSermonIds.has(sermon.id),
+          bible_references: sermon.bible_references || []
+        })) || [];
+
+        setSermons(sermonsWithLikes);
+      } else {
+        setSermons(sermonsData?.map(sermon => ({
+          ...sermon,
+          liked: false,
+          bible_references: sermon.bible_references || []
+        })) || []);
+      }
     } catch (error) {
       console.error('Error fetching sermons:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch sermons",
+        variant: "destructive",
+      });
     }
   };
 
-  // Fetch devotionals for main page cards
   const fetchDevotionals = async () => {
     try {
       const { data, error } = await supabase
         .from('devotionals')
         .select('*')
         .order('devotional_date', { ascending: false })
-        .limit(3); // Get latest 3 devotionals for main page
+        .limit(3);
 
       if (error) throw error;
       setDevotionals(data || []);
@@ -201,9 +225,8 @@ const Index = () => {
       fetchSermons();
       fetchDevotionals();
     }
-  }, [userProfile]);
+  }, [userProfile, user]);
 
-  // Authentication functions
   const handleLogin = async (email: string, password: string) => {
     try {
       setAuthError('');
@@ -269,32 +292,105 @@ const Index = () => {
     }
   };
 
-  // Sermon functions
-  const handleLikeSermon = async (sermondId: string) => {
-    if (!user) return;
+  const handleLikeSermon = async (sermonId: string) => {
+    if (!user) {
+      toast({
+        title: "Login required",
+        description: "Please login to like sermons",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
-      const { data: existingLike } = await supabase
+      console.log('Handling like for sermon:', sermonId, 'by user:', user.id);
+
+      const { data: existingLike, error: fetchError } = await supabase
         .from('user_sermon_likes')
         .select('id')
         .eq('user_id', user.id)
-        .eq('sermon_id', sermondId)
+        .eq('sermon_id', sermonId)
         .single();
 
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        console.error('Error fetching existing like:', fetchError);
+        return;
+      }
+
       if (existingLike) {
-        await supabase
+        const { error: deleteError } = await supabase
           .from('user_sermon_likes')
           .delete()
           .eq('id', existingLike.id);
+
+        if (deleteError) {
+          console.error('Error removing like:', deleteError);
+          toast({
+            title: "Error",
+            description: "Failed to remove like",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const { error: updateError } = await supabase
+          .from('sermons')
+          .update({ 
+            likes: Math.max(0, (sermons.find(s => s.id === sermonId)?.likes || 1) - 1)
+          })
+          .eq('id', sermonId);
+
+        if (updateError) {
+          console.error('Error updating likes count:', updateError);
+        }
+
+        console.log('Sermon unliked successfully');
       } else {
-        await supabase
+        const { error: insertError } = await supabase
           .from('user_sermon_likes')
-          .insert({ user_id: user.id, sermon_id: sermondId });
+          .insert({ 
+            user_id: user.id, 
+            sermon_id: sermonId 
+          });
+
+        if (insertError) {
+          console.error('Error adding like:', insertError);
+          toast({
+            title: "Error",
+            description: "Failed to add like",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const { error: updateError } = await supabase
+          .from('sermons')
+          .update({ 
+            likes: (sermons.find(s => s.id === sermonId)?.likes || 0) + 1
+          })
+          .eq('id', sermonId);
+
+        if (updateError) {
+          console.error('Error updating likes count:', updateError);
+        }
+
+        console.log('Sermon liked successfully');
       }
 
-      fetchSermons();
+      await fetchSermons();
+
+      toast({
+        title: existingLike ? "Unliked" : "Liked",
+        description: existingLike ? "Removed from favorites" : "Added to favorites",
+      });
+
     } catch (error) {
       console.error('Error toggling like:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update like status",
+        variant: "destructive",
+      });
     }
   };
 
@@ -324,7 +420,6 @@ const Index = () => {
     );
   }
 
-  // Check if user has access or is admin
   const hasAccess = userProfile?.has_access || userProfile?.role === 'admin';
 
   if (!hasAccess) {
@@ -342,7 +437,6 @@ const Index = () => {
   return (
     <div className="min-h-screen gradient-bg">
       <div className="container mx-auto px-4 py-8">
-        {/* Header */}
         <header className="text-center mb-12">
           <div className="flex justify-between items-center mb-6">
             <div></div>
@@ -364,7 +458,6 @@ const Index = () => {
             Feeding souls with God's eternal truth
           </p>
           
-          {/* Navigation Buttons */}
           <div className="flex justify-center gap-4 flex-wrap">
             <Button 
               onClick={() => {
@@ -459,7 +552,6 @@ const Index = () => {
           </div>
         </header>
 
-        {/* Content Sections */}
         {showDevotionalManagement && userProfile?.role === 'admin' ? (
           <DevotionalManagement />
         ) : showDevotional ? (
@@ -479,13 +571,8 @@ const Index = () => {
           />
         ) : (
           <div className="grid gap-8">
-            {/* Daily Verse */}
             <DailyVerse />
-
-            {/* Daily Devotionals Cards */}
             <DevotionalCards devotionals={devotionals} />
-
-            {/* Recent Sermon Categories - Compact Version */}
             <SermonSection 
               sermons={sermons}
               categories={categories}

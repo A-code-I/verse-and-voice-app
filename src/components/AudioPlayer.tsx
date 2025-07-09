@@ -55,6 +55,37 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
 
   const videoId = sermon.youtube_url ? getYouTubeVideoId(sermon.youtube_url) : null;
 
+  // Handle visibility changes and page lifecycle
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      console.log('Visibility changed:', document.hidden);
+      // Don't pause on visibility change - let user control playback
+    };
+
+    const handlePageHide = () => {
+      console.log('Page hidden - maintaining audio playback');
+      // Don't pause on page hide - audio should continue
+    };
+
+    const handlePageShow = () => {
+      console.log('Page shown - checking player state');
+      // Resume time updates when page becomes visible again
+      if (playerRef.current && playerReady && !timeUpdateIntervalRef.current) {
+        startTimeUpdates();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('pageshow', handlePageShow);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('pageshow', handlePageShow);
+    };
+  }, [playerReady]);
+
   useEffect(() => {
     const loadYouTubeAPI = () => {
       if (window.YT && window.YT.Player) {
@@ -113,6 +144,35 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     }
   }, [videoId, currentTime, isDragging, isPlaying]);
 
+  const startTimeUpdates = () => {
+    const updateTime = () => {
+      if (!isDragging && playerRef.current) {
+        try {
+          const currentVideoTime = playerRef.current.getCurrentTime();
+          const videoDur = playerRef.current.getDuration();
+          
+          if (currentVideoTime !== undefined && currentVideoTime >= 0) {
+            const time = Math.floor(currentVideoTime * 10) / 10;
+            setCurrentTime(time);
+            setSeekValue(time);
+          }
+          
+          if (videoDur > 0 && Math.abs(videoDur - duration) > 1) {
+            setDuration(videoDur);
+          }
+        } catch (error) {
+          console.warn('Error updating time:', error);
+        }
+      }
+      
+      if (playerRef.current && playerReady) {
+        timeUpdateIntervalRef.current = setTimeout(updateTime, 500);
+      }
+    };
+    
+    updateTime();
+  };
+
   useEffect(() => {
     if (!videoId || !apiReady) {
       console.log('Waiting for video ID and API ready:', { videoId, apiReady });
@@ -151,7 +211,9 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
             modestbranding: 1,
             rel: 0,
             showinfo: 0,
-            origin: window.location.origin
+            origin: window.location.origin,
+            playsinline: 1,
+            iv_load_policy: 3
           },
           events: {
             onReady: (event: any) => {
@@ -173,32 +235,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
                 event.target.seekTo(lastPlayedPosition, true);
               }
               
-              const updateTime = () => {
-                if (!isDragging && playerRef.current) {
-                  try {
-                    const currentVideoTime = playerRef.current.getCurrentTime();
-                    const videoDur = playerRef.current.getDuration();
-                    
-                    if (currentVideoTime !== undefined && currentVideoTime >= 0) {
-                      const time = Math.floor(currentVideoTime * 10) / 10;
-                      setCurrentTime(time);
-                      setSeekValue(time);
-                    }
-                    
-                    if (videoDur > 0 && Math.abs(videoDur - duration) > 1) {
-                      setDuration(videoDur);
-                    }
-                  } catch (error) {
-                    console.warn('Error updating time:', error);
-                  }
-                }
-                
-                if (playerRef.current) {
-                  timeUpdateIntervalRef.current = setTimeout(updateTime, 500);
-                }
-              };
-              
-              updateTime();
+              startTimeUpdates();
             },
             onStateChange: (event: any) => {
               const state = event.data;
@@ -317,26 +354,20 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
 
   const handleSeekChange = (value: number[]) => {
     const newTime = value[0];
-    console.log('Seek change:', newTime);
-    
-    if (!isDragging) {
-      setIsDragging(true);
-    }
-    
     setSeekValue(newTime);
+    setIsDragging(true);
+  };
+
+  const handleSeekCommit = (value: number[]) => {
+    const newTime = value[0];
+    console.log('Seek commit:', newTime);
     
-    if (seekTimeoutRef.current) {
-      clearTimeout(seekTimeoutRef.current);
+    if (playerRef.current && playerReady) {
+      console.log(`Seeking to: ${newTime}s`);
+      playerRef.current.seekTo(newTime, true);
+      setCurrentTime(newTime);
     }
-    
-    seekTimeoutRef.current = setTimeout(() => {
-      if (playerRef.current && playerReady) {
-        console.log(`Seeking to: ${newTime}s`);
-        playerRef.current.seekTo(newTime, true);
-        setCurrentTime(newTime);
-      }
-      setIsDragging(false);
-    }, 150);
+    setIsDragging(false);
   };
 
   const handleVolumeChange = (value: number[]) => {
@@ -418,7 +449,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
           <Heart 
             className={`h-6 w-6 ${sermon.liked ? 'fill-red-500 text-red-500' : ''}`} 
           />
-          <span className="ml-2">{sermon.likes}</span>
+          <span className="ml-2">{sermon.likes || 0}</span>
         </Button>
       </div>
       
@@ -451,6 +482,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               max={duration > 0 ? duration : 100}
               step={1}
               onValueChange={handleSeekChange}
+              onValueCommit={handleSeekCommit}
               className="w-full cursor-pointer"
               disabled={!playerReady || error !== ''}
             />
