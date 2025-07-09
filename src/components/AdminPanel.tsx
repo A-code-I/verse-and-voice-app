@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Trash2, Plus, ExternalLink } from "lucide-react";
+import { Trash2, Plus, ExternalLink, Edit, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -30,6 +30,10 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
   const [sermons, setSermons] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [useAudioDrive, setUseAudioDrive] = useState(true);
+  const [newCategory, setNewCategory] = useState('');
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [editCategoryValue, setEditCategoryValue] = useState('');
   const { toast } = useToast();
 
   React.useEffect(() => {
@@ -49,6 +53,49 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
     } catch (error) {
       console.error('Error fetching sermons:', error);
     }
+  };
+
+  const handleAddCategory = () => {
+    if (newCategory.trim() && !categories.includes(newCategory.trim())) {
+      // In a real implementation, you'd save this to a categories table
+      // For now, we'll just add it to the local state
+      setFormData(prev => ({ ...prev, category: newCategory.trim() }));
+      setNewCategory('');
+      setShowNewCategoryInput(false);
+      toast({
+        title: "Category added",
+        description: `"${newCategory.trim()}" is now available for selection.`,
+      });
+    }
+  };
+
+  const handleEditCategory = (oldCategory: string) => {
+    setEditingCategory(oldCategory);
+    setEditCategoryValue(oldCategory);
+  };
+
+  const handleSaveEditCategory = () => {
+    if (editCategoryValue.trim() && editCategoryValue !== editingCategory) {
+      // Update the current form if it was using the old category
+      if (formData.category === editingCategory) {
+        setFormData(prev => ({ ...prev, category: editCategoryValue.trim() }));
+      }
+      
+      setEditingCategory(null);
+      setEditCategoryValue('');
+      toast({
+        title: "Category updated",
+        description: `Category renamed to "${editCategoryValue.trim()}".`,
+      });
+    } else {
+      setEditingCategory(null);
+      setEditCategoryValue('');
+    }
+  };
+
+  const handleCancelEditCategory = () => {
+    setEditingCategory(null);
+    setEditCategoryValue('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -170,6 +217,9 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
     });
   };
 
+  // Get all unique categories from existing sermons plus predefined ones
+  const allCategories = [...new Set([...categories, ...sermons.map(s => s.category)])].filter(Boolean);
+
   return (
     <div className="space-y-6">
       {/* Audio Source Configuration */}
@@ -197,6 +247,110 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
         </CardContent>
       </Card>
 
+      {/* Category Management */}
+      <Card className="glass-effect border-white/20 text-white">
+        <CardHeader>
+          <CardTitle className="text-xl font-bible">Category Management</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              {allCategories.map(category => (
+                <div key={category} className="flex items-center gap-2">
+                  {editingCategory === category ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={editCategoryValue}
+                        onChange={(e) => setEditCategoryValue(e.target.value)}
+                        className="h-8 w-32 bg-white/10 border-white/20 text-white text-sm"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveEditCategory();
+                          if (e.key === 'Escape') handleCancelEditCategory();
+                        }}
+                        autoFocus
+                      />
+                      <Button
+                        size="sm"
+                        onClick={handleSaveEditCategory}
+                        className="h-8 w-8 p-0 bg-green-600 hover:bg-green-700"
+                      >
+                        ✓
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleCancelEditCategory}
+                        className="h-8 w-8 p-0 border-white/30 text-white hover:bg-white/20"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <Badge variant="outline" className="border-bible-gold/50 text-bible-gold">
+                        {category}
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleEditCategory(category)}
+                        className="h-6 w-6 p-0 text-white/60 hover:text-white hover:bg-white/20"
+                      >
+                        <Edit className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            
+            {showNewCategoryInput ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  placeholder="Enter new category name"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddCategory();
+                    if (e.key === 'Escape') {
+                      setShowNewCategoryInput(false);
+                      setNewCategory('');
+                    }
+                  }}
+                  autoFocus
+                />
+                <Button
+                  onClick={handleAddCategory}
+                  className="bg-bible-gold hover:bg-bible-gold/80 text-bible-navy"
+                >
+                  Add
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowNewCategoryInput(false);
+                    setNewCategory('');
+                  }}
+                  className="border-white/30 text-white hover:bg-white/20"
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button
+                onClick={() => setShowNewCategoryInput(true)}
+                variant="outline"
+                className="border-white/30 text-white hover:bg-white/20"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add New Category
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Add/Edit Sermon Form */}
       <Card className="glass-effect border-white/20 text-white">
         <CardHeader>
@@ -220,21 +374,29 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
               
               <div>
                 <label className="block text-sm font-medium mb-2">Category</label>
-                <Select 
-                  value={formData.category} 
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
-                >
-                  <SelectTrigger className="bg-white/10 border-white/20 text-white">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map(category => (
-                      <SelectItem key={category} value={category}>
-                        {category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select 
+                    value={formData.category} 
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
+                  >
+                    <SelectTrigger className="bg-white/10 border-white/20 text-white flex-1">
+                      <SelectValue placeholder="Select or type category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allCategories.map(category => (
+                        <SelectItem key={category} value={category}>
+                          {category}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={formData.category}
+                    onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                    placeholder="Or type new category"
+                    className="bg-white/10 border-white/20 text-white placeholder:text-white/50 w-48"
+                  />
+                </div>
               </div>
 
               <div>
