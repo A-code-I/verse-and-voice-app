@@ -137,6 +137,27 @@ export type Database = {
         }
         Relationships: []
       }
+      sermon_categories: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       sermons: {
         Row: {
           audio_drive_url: string | null

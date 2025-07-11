@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Trash2, Plus, ExternalLink, Edit, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 interface AdminPanelProps {
   categories: string[];
@@ -35,6 +35,79 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [editCategoryValue, setEditCategoryValue] = useState('');
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Fetch categories from database
+  const { data: dbCategories = [], refetch: refetchCategories } = useQuery({
+    queryKey: ['sermon-categories'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('sermon_categories')
+        .select('*')
+        .order('name');
+      if (error) throw error;
+      return data || [];
+    }
+  });
+
+  // Add category mutation
+  const addCategoryMutation = useMutation({
+    mutationFn: async (categoryName: string) => {
+      const { data, error } = await supabase
+        .from('sermon_categories')
+        .insert([{ name: categoryName.trim() }])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sermon-categories'] });
+      setNewCategory('');
+      setShowNewCategoryInput(false);
+      toast({
+        title: "Category added",
+        description: "New category has been successfully added.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error adding category",
+        description: error.message.includes('unique') ? 'Category already exists' : error.message,
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Update category mutation
+  const updateCategoryMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const { data, error } = await supabase
+        .from('sermon_categories')
+        .update({ name: name.trim(), updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sermon-categories'] });
+      setEditingCategory(null);
+      setEditCategoryValue('');
+      toast({
+        title: "Category updated",
+        description: "Category has been successfully updated.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error updating category",
+        description: error.message.includes('unique') ? 'Category name already exists' : error.message,
+        variant: "destructive",
+      });
+    }
+  });
 
   React.useEffect(() => {
     fetchSermons();
@@ -56,37 +129,28 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
   };
 
   const handleAddCategory = () => {
-    if (newCategory.trim() && !categories.includes(newCategory.trim())) {
-      // In a real implementation, you'd save this to a categories table
-      // For now, we'll just add it to the local state
-      setFormData(prev => ({ ...prev, category: newCategory.trim() }));
-      setNewCategory('');
-      setShowNewCategoryInput(false);
-      toast({
-        title: "Category added",
-        description: `"${newCategory.trim()}" is now available for selection.`,
-      });
+    if (newCategory.trim() && !dbCategories.find(cat => cat.name === newCategory.trim())) {
+      addCategoryMutation.mutate(newCategory.trim());
     }
   };
 
-  const handleEditCategory = (oldCategory: string) => {
-    setEditingCategory(oldCategory);
-    setEditCategoryValue(oldCategory);
+  const handleEditCategory = (category: any) => {
+    setEditingCategory(category.id);
+    setEditCategoryValue(category.name);
   };
 
   const handleSaveEditCategory = () => {
-    if (editCategoryValue.trim() && editCategoryValue !== editingCategory) {
-      // Update the current form if it was using the old category
-      if (formData.category === editingCategory) {
-        setFormData(prev => ({ ...prev, category: editCategoryValue.trim() }));
+    if (editCategoryValue.trim() && editingCategory) {
+      const existingCategory = dbCategories.find(cat => cat.name === editCategoryValue.trim() && cat.id !== editingCategory);
+      if (existingCategory) {
+        toast({
+          title: "Error",
+          description: "Category name already exists",
+          variant: "destructive",
+        });
+        return;
       }
-      
-      setEditingCategory(null);
-      setEditCategoryValue('');
-      toast({
-        title: "Category updated",
-        description: `Category renamed to "${editCategoryValue.trim()}".`,
-      });
+      updateCategoryMutation.mutate({ id: editingCategory, name: editCategoryValue.trim() });
     } else {
       setEditingCategory(null);
       setEditCategoryValue('');
@@ -217,8 +281,11 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
     });
   };
 
-  // Get all unique categories from existing sermons plus predefined ones
-  const allCategories = [...new Set([...categories, ...sermons.map(s => s.category)])].filter(Boolean);
+  // Get all unique categories from both database and existing sermons
+  const allCategories = [...new Set([
+    ...dbCategories.map(cat => cat.name),
+    ...sermons.map(s => s.category)
+  ])].filter(Boolean);
 
   return (
     <div className="space-y-6">
@@ -255,9 +322,9 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
         <CardContent>
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
-              {allCategories.map(category => (
-                <div key={category} className="flex items-center gap-2">
-                  {editingCategory === category ? (
+              {dbCategories.map(category => (
+                <div key={category.id} className="flex items-center gap-2">
+                  {editingCategory === category.id ? (
                     <div className="flex items-center gap-2">
                       <Input
                         value={editCategoryValue}
@@ -273,6 +340,7 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
                         size="sm"
                         onClick={handleSaveEditCategory}
                         className="h-8 w-8 p-0 bg-green-600 hover:bg-green-700"
+                        disabled={updateCategoryMutation.isPending}
                       >
                         ✓
                       </Button>
@@ -288,7 +356,7 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
                   ) : (
                     <div className="flex items-center gap-1">
                       <Badge variant="outline" className="border-bible-gold/50 text-bible-gold">
-                        {category}
+                        {category.name}
                       </Badge>
                       <Button
                         size="sm"
@@ -323,8 +391,9 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
                 <Button
                   onClick={handleAddCategory}
                   className="bg-bible-gold hover:bg-bible-gold/80 text-bible-navy"
+                  disabled={addCategoryMutation.isPending}
                 >
-                  Add
+                  {addCategoryMutation.isPending ? 'Adding...' : 'Add'}
                 </Button>
                 <Button
                   variant="outline"
@@ -380,7 +449,7 @@ const AdminPanel = ({ categories, onRefreshSermons }: AdminPanelProps) => {
                     onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
                   >
                     <SelectTrigger className="bg-white/10 border-white/20 text-white flex-1">
-                      <SelectValue placeholder="Select or type category" />
+                      <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
                       {allCategories.map(category => (
