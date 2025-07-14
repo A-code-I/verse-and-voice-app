@@ -105,14 +105,74 @@ const SermonSection = ({
             ))}
           </div>
 
-          {/* Sermons Grid */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredSermons.map(sermon => (
-              <div key={sermon.id} className="space-y-4">
+          {/* Conditional Layout - Full width when audio player is expanded */}
+          {currentSermon ? (
+            <div className="space-y-6">
+              {/* Show expanded audio player first */}
+              <div className="animate-fade-in">
+                <AudioPlayer 
+                  sermon={currentSermon}
+                  onLike={() => onLikeSermon(currentSermon.id)}
+                />
+              </div>
+              
+              {/* Show other sermons in a compact grid below */}
+              <div className="border-t border-white/20 pt-6">
+                <h4 className="text-lg font-bible text-white mb-4 text-center">Other Recent Sermons</h4>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {filteredSermons
+                    .filter(sermon => sermon.id !== currentSermon.id)
+                    .slice(0, 3)
+                    .map(sermon => (
+                    <Card 
+                      key={sermon.id}
+                      className="bg-white/10 border-white/20 hover:bg-white/20 transition-all cursor-pointer"
+                      onClick={() => handleSermonSelect(sermon)}
+                    >
+                      <CardHeader className="pb-2">
+                        <div className="flex justify-between items-start">
+                          <CardTitle className="text-sm font-bible text-white line-clamp-2 flex-1 mr-2">
+                            {sermon.title}
+                          </CardTitle>
+                          <div className="flex items-center gap-1">
+                            {sermon.audio_drive_url && <Play className="h-4 w-4 text-bible-gold" />}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onLikeSermon(sermon.id);
+                              }}
+                              className="text-white hover:bg-white/20 p-1"
+                            >
+                              <Heart 
+                                className={`h-4 w-4 ${sermon.liked ? 'fill-red-500 text-red-500' : ''}`} 
+                              />
+                              <span className="ml-1 text-xs">{sermon.likes}</span>
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="flex gap-1 flex-wrap">
+                          <Badge variant="secondary" className="bg-bible-purple/20 text-white text-xs">
+                            {sermon.category}
+                          </Badge>
+                          <Badge variant="outline" className="border-white/30 text-white text-xs">
+                            {new Date(sermon.sermon_date).toLocaleDateString()}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Regular Grid Layout when no sermon is selected */
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {filteredSermons.map(sermon => (
                 <Card 
-                  className={`bg-white/10 border-white/20 hover:bg-white/20 transition-all cursor-pointer ${
-                    currentSermon?.id === sermon.id ? 'ring-2 ring-bible-gold bg-white/20' : ''
-                  }`}
+                  key={sermon.id}
+                  className="bg-white/10 border-white/20 hover:bg-white/20 transition-all cursor-pointer"
                   onClick={() => handleSermonSelect(sermon)}
                 >
                   <CardHeader className="pb-3">
@@ -123,11 +183,7 @@ const SermonSection = ({
                       <div className="flex items-center gap-2">
                         {sermon.audio_drive_url && (
                           <div className="text-bible-gold">
-                            {currentSermon?.id === sermon.id ? (
-                              <Pause className="h-5 w-5" />
-                            ) : (
-                              <Play className="h-5 w-5" />
-                            )}
+                            <Play className="h-5 w-5" />
                           </div>
                         )}
                         <Button
@@ -196,29 +252,17 @@ const SermonSection = ({
                       </div>
                     )}
                     
-                    {currentSermon?.id === sermon.id && (
-                      <div className="mt-3 p-3 bg-bible-gold/20 rounded-lg border border-bible-gold/30">
-                        <p className="text-bible-gold text-xs font-semibold text-center flex items-center justify-center gap-2">
-                          🎵 Audio Player Expanded Below
-                          <Play className="h-3 w-3" />
-                        </p>
-                      </div>
-                    )}
+                    <div className="mt-3 p-2 bg-bible-gold/10 rounded-lg border border-bible-gold/30">
+                      <p className="text-bible-gold text-xs font-semibold text-center flex items-center justify-center gap-2">
+                        🎵 Click to Play Audio
+                        <Play className="h-3 w-3" />
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
-
-                {/* Audio Player Expanded View */}
-                {currentSermon?.id === sermon.id && (
-                  <div className="animate-fade-in">
-                    <AudioPlayer 
-                      sermon={currentSermon}
-                      onLike={() => onLikeSermon(currentSermon.id)}
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           {filteredSermons.length === 0 && (
             <div className="text-center py-12">
@@ -227,7 +271,7 @@ const SermonSection = ({
           )}
 
           {/* View All Button at bottom */}
-          {onViewAllSermons && sermons.length > 6 && (
+          {onViewAllSermons && sermons.length > 6 && !currentSermon && (
             <div className="text-center mt-8">
               <Button 
                 onClick={onViewAllSermons}

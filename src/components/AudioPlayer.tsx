@@ -24,6 +24,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   const [apiReady, setApiReady] = useState(false);
   const playerRef = useRef<any>(null);
   const timeUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const mountedRef = useRef(true);
 
   const getYouTubeVideoId = (url: string): string | null => {
     if (!url || typeof url !== 'string') return null;
@@ -69,12 +70,16 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       }
       
       window.onYouTubeIframeAPIReady = () => {
-        setApiReady(true);
+        if (mountedRef.current) {
+          setApiReady(true);
+        }
       };
 
       const checkApiReady = () => {
         if (window.YT && window.YT.Player) {
-          setApiReady(true);
+          if (mountedRef.current) {
+            setApiReady(true);
+          }
         } else {
           setTimeout(checkApiReady, 100);
         }
@@ -85,59 +90,55 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     loadYouTubeAPI();
   }, []);
 
-  // Load saved position
-  useEffect(() => {
-    if (videoId) {
-      const savedPosition = localStorage.getItem(`sermon-position-${videoId}`);
-      if (savedPosition) {
-        const position = parseFloat(savedPosition);
-        if (position > 0 && position < 99999) {
-          setCurrentTime(position);
-        }
-      }
-    }
-  }, [videoId]);
-
-  // Start time updates
+  // Start time updates with better error handling
   const startTimeUpdates = () => {
     if (timeUpdateIntervalRef.current) {
       clearInterval(timeUpdateIntervalRef.current);
     }
 
     timeUpdateIntervalRef.current = setInterval(() => {
-      if (!isDragging && playerRef.current && playerReady) {
-        try {
-          const time = playerRef.current.getCurrentTime();
-          const dur = playerRef.current.getDuration();
+      if (!mountedRef.current || !playerRef.current || !playerReady || isDragging) {
+        return;
+      }
+
+      try {
+        const time = playerRef.current.getCurrentTime();
+        const dur = playerRef.current.getDuration();
+        
+        if (typeof time === 'number' && time >= 0 && !isNaN(time)) {
+          setCurrentTime(time);
+          console.log('Time updated:', time); // Debug log
           
-          if (time >= 0 && !isNaN(time)) {
-            setCurrentTime(time);
-            // Save position periodically
-            if (videoId && time > 0) {
-              localStorage.setItem(`sermon-position-${videoId}`, time.toString());
-            }
+          // Save position periodically
+          if (videoId && time > 0) {
+            localStorage.setItem(`sermon-position-${videoId}`, time.toString());
           }
-          
-          if (dur > 0 && !isNaN(dur)) {
-            setDuration(dur);
-          }
-        } catch (error) {
-          console.warn('Error updating time:', error);
         }
+        
+        if (typeof dur === 'number' && dur > 0 && !isNaN(dur)) {
+          setDuration(dur);
+        }
+      } catch (error) {
+        console.warn('Error updating time:', error);
       }
     }, 1000);
   };
 
+  // Stop time updates
+  const stopTimeUpdates = () => {
+    if (timeUpdateIntervalRef.current) {
+      clearInterval(timeUpdateIntervalRef.current);
+      timeUpdateIntervalRef.current = null;
+    }
+  };
+
   // Initialize YouTube player
   useEffect(() => {
-    if (!videoId || !apiReady) return;
+    if (!videoId || !apiReady || !mountedRef.current) return;
 
     const initializePlayer = () => {
       // Clean up previous player
-      if (timeUpdateIntervalRef.current) {
-        clearInterval(timeUpdateIntervalRef.current);
-        timeUpdateIntervalRef.current = null;
-      }
+      stopTimeUpdates();
       
       if (playerRef.current) {
         try {
@@ -171,6 +172,8 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
           },
           events: {
             onReady: (event: any) => {
+              if (!mountedRef.current) return;
+              
               console.log('YouTube player ready');
               setPlayerReady(true);
               setLoading(false);
@@ -183,24 +186,38 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
                 setDuration(videoDuration);
               }
               
-              // Seek to saved position
+              // Load saved position
               const savedPosition = localStorage.getItem(`sermon-position-${videoId}`);
               if (savedPosition) {
                 const position = parseFloat(savedPosition);
                 if (position > 0 && position < videoDuration) {
                   setTimeout(() => {
-                    event.target.seekTo(position, true);
-                    setCurrentTime(position);
+                    if (mountedRef.current && playerRef.current) {
+                      event.target.seekTo(position, true);
+                      setCurrentTime(position);
+                    }
                   }, 500);
                 }
               }
               
+              // Start time updates immediately after player is ready
               startTimeUpdates();
             },
             onStateChange: (event: any) => {
+              if (!mountedRef.current) return;
+              
               const state = event.data;
-              setIsPlaying(state === 1); // 1 = playing
+              const playing = state === 1; // 1 = playing
+              setIsPlaying(playing);
               setLoading(state === 3); // 3 = buffering
+              
+              console.log('Player state changed:', state, 'Playing:', playing); // Debug log
+              
+              if (playing) {
+                startTimeUpdates();
+              } else {
+                stopTimeUpdates();
+              }
               
               if (state === 0) { // ended
                 setCurrentTime(0);
@@ -214,6 +231,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               setError('Failed to load video');
               setPlayerReady(false);
               setLoading(false);
+              stopTimeUpdates();
             }
           }
         });
@@ -227,9 +245,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     initializePlayer();
 
     return () => {
-      if (timeUpdateIntervalRef.current) {
-        clearInterval(timeUpdateIntervalRef.current);
-      }
+      stopTimeUpdates();
       if (playerRef.current?.destroy) {
         try {
           playerRef.current.destroy();
@@ -239,6 +255,14 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       }
     };
   }, [videoId, apiReady, volume]);
+
+  // Component unmount cleanup
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      stopTimeUpdates();
+    };
+  }, []);
 
   // Reset state when sermon changes
   useEffect(() => {
@@ -259,41 +283,60 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
 
     setError('');
     
-    if (isPlaying) {
-      playerRef.current.pauseVideo();
-    } else {
-      playerRef.current.playVideo();
+    try {
+      if (isPlaying) {
+        playerRef.current.pauseVideo();
+      } else {
+        playerRef.current.playVideo();
+      }
+    } catch (error) {
+      console.error('Error toggling play/pause:', error);
+      setError('Failed to control playback');
     }
   };
 
   const skipTime = (seconds: number) => {
     if (!videoId || !playerRef.current || !playerReady) return;
     
-    const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
-    playerRef.current.seekTo(newTime, true);
-    setCurrentTime(newTime);
+    try {
+      const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
+      playerRef.current.seekTo(newTime, true);
+      setCurrentTime(newTime);
+      console.log('Skipped to:', newTime); // Debug log
+    } catch (error) {
+      console.error('Error skipping time:', error);
+    }
   };
 
   const seekToTime = (timeInSeconds: number) => {
     if (!videoId || !playerRef.current || !playerReady) return;
     
-    const clampedTime = Math.max(0, Math.min(duration, timeInSeconds));
-    playerRef.current.seekTo(clampedTime, true);
-    setCurrentTime(clampedTime);
-    
-    if (!isPlaying) {
-      playerRef.current.playVideo();
+    try {
+      const clampedTime = Math.max(0, Math.min(duration, timeInSeconds));
+      playerRef.current.seekTo(clampedTime, true);
+      setCurrentTime(clampedTime);
+      console.log('Seeked to:', clampedTime); // Debug log
+      
+      if (!isPlaying) {
+        playerRef.current.playVideo();
+      }
+    } catch (error) {
+      console.error('Error seeking:', error);
     }
   };
 
   const restartFromBeginning = () => {
     if (!videoId || !playerRef.current || !playerReady) return;
     
-    playerRef.current.seekTo(0, true);
-    setCurrentTime(0);
-    
-    if (videoId) {
-      localStorage.removeItem(`sermon-position-${videoId}`);
+    try {
+      playerRef.current.seekTo(0, true);
+      setCurrentTime(0);
+      
+      if (videoId) {
+        localStorage.removeItem(`sermon-position-${videoId}`);
+      }
+    } catch (error) {
+      console.error('Error restarting:', error);
     }
   };
 
@@ -308,17 +351,27 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   const handleSeekCommit = (value: number[]) => {
     if (!playerReady || !playerRef.current) return;
     
-    const newTime = value[0];
-    playerRef.current.seekTo(newTime, true);
-    setCurrentTime(newTime);
-    setIsDragging(false);
+    try {
+      const newTime = value[0];
+      playerRef.current.seekTo(newTime, true);
+      setCurrentTime(newTime);
+      setIsDragging(false);
+      console.log('Seek committed to:', newTime); // Debug log
+    } catch (error) {
+      console.error('Error committing seek:', error);
+      setIsDragging(false);
+    }
   };
 
   const handleVolumeChange = (value: number[]) => {
     const newVolume = value[0];
     setVolume(newVolume);
     if (playerRef.current && playerReady) {
-      playerRef.current.setVolume(newVolume);
+      try {
+        playerRef.current.setVolume(newVolume);
+      } catch (error) {
+        console.error('Error setting volume:', error);
+      }
     }
   };
 
