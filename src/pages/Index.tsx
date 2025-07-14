@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from '@supabase/supabase-js';
 import DailyVerse from '@/components/DailyVerse';
@@ -16,7 +17,7 @@ import DailyDevotional from '@/components/DailyDevotional';
 import DevotionalManagement from '@/components/DevotionalManagement';
 import DevotionalCards from '@/components/DevotionalCards';
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Users, BookOpen, Calendar } from "lucide-react";
+import { LogOut, Users, BookOpen, Calendar, ChevronDown, ChevronUp, Maximize2, Minimize2 } from "lucide-react";
 import SermonLibrary from '@/components/SermonLibrary';
 
 export interface Sermon {
@@ -65,6 +66,8 @@ const Index = () => {
   const [showSermonLibrary, setShowSermonLibrary] = useState(false);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string>('');
+  const [expandedSermons, setExpandedSermons] = useState(false);
+  const [expandedDevotionals, setExpandedDevotionals] = useState(false);
   const { toast } = useToast();
 
   const categories = [
@@ -401,6 +404,8 @@ const Index = () => {
     setShowDevotionalManagement(false);
     setShowSermonLibrary(false);
     setCurrentSermon(null);
+    setExpandedSermons(false);
+    setExpandedDevotionals(false);
   };
 
   if (loading) {
@@ -573,18 +578,90 @@ const Index = () => {
         ) : (
           <div className="space-y-8">
             <DailyVerse />
-            <DevotionalCards devotionals={devotionals} />
-            <SermonSection 
-              sermons={sermons}
-              categories={categories}
-              onSelectSermon={setCurrentSermon}
-              onLikeSermon={handleLikeSermon}
-              currentSermon={currentSermon}
-              onViewAllSermons={() => {
-                resetNavigation();
-                setShowSermonLibrary(true);
-              }}
-            />
+            
+            <TooltipProvider>
+              <Card className="glass-effect border-white/20 text-white">
+                <CardHeader>
+                  <div className="flex justify-between items-center">
+                    <CardTitle className="text-2xl font-bible flex items-center gap-2">
+                      <BookOpen className="h-6 w-6" />
+                      Daily Devotionals
+                    </CardTitle>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setExpandedDevotionals(!expandedDevotionals)}
+                          className="text-white hover:bg-white/20"
+                        >
+                          {expandedDevotionals ? (
+                            <><Minimize2 className="h-4 w-4 mr-1" /> <ChevronUp className="h-4 w-4" /></>
+                          ) : (
+                            <><Maximize2 className="h-4 w-4 mr-1" /> <ChevronDown className="h-4 w-4" /></>
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{expandedDevotionals ? 'Minimize devotionals' : 'Expand devotionals'}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </CardHeader>
+                {expandedDevotionals && (
+                  <CardContent>
+                    <DevotionalCards devotionals={devotionals} />
+                  </CardContent>
+                )}
+              </Card>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Card className="glass-effect border-white/20 text-white">
+                <CardHeader>
+                  <div className="flex justify-between items-center">
+                    <CardTitle className="text-2xl font-bible flex items-center gap-2">
+                      <Calendar className="h-6 w-6" />
+                      Latest Bible Sermons
+                    </CardTitle>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setExpandedSermons(!expandedSermons)}
+                          className="text-white hover:bg-white/20"
+                        >
+                          {expandedSermons ? (
+                            <><Minimize2 className="h-4 w-4 mr-1" /> <ChevronUp className="h-4 w-4" /></>
+                          ) : (
+                            <><Maximize2 className="h-4 w-4 mr-1" /> <ChevronDown className="h-4 w-4" /></>
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{expandedSermons ? 'Minimize sermons' : 'Expand sermons'}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </CardHeader>
+                {expandedSermons && (
+                  <CardContent>
+                    <SermonSection 
+                      sermons={sermons}
+                      categories={categories}
+                      onSelectSermon={setCurrentSermon}
+                      onLikeSermon={handleLikeSermon}
+                      currentSermon={currentSermon}
+                      onViewAllSermons={() => {
+                        resetNavigation();
+                        setShowSermonLibrary(true);
+                      }}
+                    />
+                  </CardContent>
+                )}
+              </Card>
+            </TooltipProvider>
           </div>
         )}
       </div>

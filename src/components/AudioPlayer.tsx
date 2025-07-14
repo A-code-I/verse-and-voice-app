@@ -24,6 +24,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   const playerRef = useRef<any>(null);
   const timeUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
+  const currentSermonIdRef = useRef<string>(sermon.id);
 
   const getYouTubeVideoId = (url: string): string | null => {
     if (!url || typeof url !== 'string') return null;
@@ -89,8 +90,9 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     loadYouTubeAPI();
   }, []);
 
-  // Start real-time updates
+  // Start time updates - simplified and more reliable
   const startTimeUpdates = () => {
+    // Clear any existing interval
     if (timeUpdateIntervalRef.current) {
       clearInterval(timeUpdateIntervalRef.current);
     }
@@ -106,6 +108,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
         
         if (typeof time === 'number' && time >= 0 && !isNaN(time)) {
           setCurrentTime(time);
+          console.log('Time updated:', time); // Debug log
           
           if (videoId && time > 0) {
             localStorage.setItem(`sermon-position-${videoId}`, time.toString());
@@ -118,7 +121,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       } catch (error) {
         console.warn('Error updating time:', error);
       }
-    }, 250); // Update every 250ms for smooth time display
+    }, 1000); // Update every second for reliable time display
   };
 
   const stopTimeUpdates = () => {
@@ -131,6 +134,14 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   // Initialize YouTube player
   useEffect(() => {
     if (!videoId || !apiReady || !mountedRef.current) return;
+
+    // Check if this is a new sermon
+    if (currentSermonIdRef.current !== sermon.id) {
+      currentSermonIdRef.current = sermon.id;
+      setCurrentTime(0);
+      setDuration(0);
+      setIsPlaying(false);
+    }
 
     const initializePlayer = () => {
       stopTimeUpdates();
@@ -200,12 +211,16 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               
               const state = event.data;
               const playing = state === 1; // 1 = playing
+              
+              console.log('Player state changed:', state, playing ? 'PLAYING' : 'NOT_PLAYING');
               setIsPlaying(playing);
               setLoading(state === 3); // 3 = buffering
               
               if (playing) {
+                // Start time updates when playing
                 startTimeUpdates();
               } else {
+                // Stop time updates when not playing, but don't clear current time
                 stopTimeUpdates();
               }
               
@@ -246,7 +261,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
         }
       }
     };
-  }, [videoId, apiReady, volume]);
+  }, [videoId, apiReady, volume, sermon.id]);
 
   // Component unmount cleanup
   useEffect(() => {
@@ -255,16 +270,6 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       stopTimeUpdates();
     };
   }, []);
-
-  // Reset state when sermon changes
-  useEffect(() => {
-    setIsPlaying(false);
-    setCurrentTime(0);
-    setDuration(0);
-    setError('');
-    setLoading(false);
-    setPlayerReady(false);
-  }, [sermon.id]);
 
   const togglePlayPause = () => {
     if (!videoId || !playerRef.current || !playerReady) {
