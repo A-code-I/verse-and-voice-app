@@ -400,6 +400,7 @@ const Index = () => {
     setShowDevotional(false);
     setShowDevotionalManagement(false);
     setShowSermonLibrary(false);
+    setCurrentSermon(null);
   };
 
   if (loading) {
@@ -570,7 +571,7 @@ const Index = () => {
             onRefreshSermons={fetchSermons}
           />
         ) : (
-          <div className="grid gap-8">
+          <div className="space-y-8">
             <DailyVerse />
             <DevotionalCards devotionals={devotionals} />
             <SermonSection 

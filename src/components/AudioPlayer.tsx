@@ -20,7 +20,6 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [playerReady, setPlayerReady] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
   const [apiReady, setApiReady] = useState(false);
   const playerRef = useRef<any>(null);
   const timeUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -90,14 +89,14 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     loadYouTubeAPI();
   }, []);
 
-  // Start time updates with better error handling
+  // Start real-time updates
   const startTimeUpdates = () => {
     if (timeUpdateIntervalRef.current) {
       clearInterval(timeUpdateIntervalRef.current);
     }
 
     timeUpdateIntervalRef.current = setInterval(() => {
-      if (!mountedRef.current || !playerRef.current || !playerReady || isDragging) {
+      if (!mountedRef.current || !playerRef.current || !playerReady) {
         return;
       }
 
@@ -107,9 +106,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
         
         if (typeof time === 'number' && time >= 0 && !isNaN(time)) {
           setCurrentTime(time);
-          console.log('Time updated:', time); // Debug log
           
-          // Save position periodically
           if (videoId && time > 0) {
             localStorage.setItem(`sermon-position-${videoId}`, time.toString());
           }
@@ -121,10 +118,9 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       } catch (error) {
         console.warn('Error updating time:', error);
       }
-    }, 1000);
+    }, 250); // Update every 250ms for smooth time display
   };
 
-  // Stop time updates
   const stopTimeUpdates = () => {
     if (timeUpdateIntervalRef.current) {
       clearInterval(timeUpdateIntervalRef.current);
@@ -137,7 +133,6 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     if (!videoId || !apiReady || !mountedRef.current) return;
 
     const initializePlayer = () => {
-      // Clean up previous player
       stopTimeUpdates();
       
       if (playerRef.current) {
@@ -199,9 +194,6 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
                   }, 500);
                 }
               }
-              
-              // Start time updates immediately after player is ready
-              startTimeUpdates();
             },
             onStateChange: (event: any) => {
               if (!mountedRef.current) return;
@@ -211,8 +203,6 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               setIsPlaying(playing);
               setLoading(state === 3); // 3 = buffering
               
-              console.log('Player state changed:', state, 'Playing:', playing); // Debug log
-              
               if (playing) {
                 startTimeUpdates();
               } else {
@@ -221,6 +211,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               
               if (state === 0) { // ended
                 setCurrentTime(0);
+                setIsPlaying(false);
                 if (videoId) {
                   localStorage.removeItem(`sermon-position-${videoId}`);
                 }
@@ -231,6 +222,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               setError('Failed to load video');
               setPlayerReady(false);
               setLoading(false);
+              setIsPlaying(false);
               stopTimeUpdates();
             }
           }
@@ -272,7 +264,6 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     setError('');
     setLoading(false);
     setPlayerReady(false);
-    setIsDragging(false);
   }, [sermon.id]);
 
   const togglePlayPause = () => {
@@ -302,7 +293,6 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
       playerRef.current.seekTo(newTime, true);
       setCurrentTime(newTime);
-      console.log('Skipped to:', newTime); // Debug log
     } catch (error) {
       console.error('Error skipping time:', error);
     }
@@ -315,7 +305,6 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       const clampedTime = Math.max(0, Math.min(duration, timeInSeconds));
       playerRef.current.seekTo(clampedTime, true);
       setCurrentTime(clampedTime);
-      console.log('Seeked to:', clampedTime); // Debug log
       
       if (!isPlaying) {
         playerRef.current.playVideo();
@@ -341,25 +330,14 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   };
 
   const handleSeekChange = (value: number[]) => {
-    if (!playerReady) return;
-    
-    const newTime = value[0];
-    setIsDragging(true);
-    setCurrentTime(newTime);
-  };
-
-  const handleSeekCommit = (value: number[]) => {
     if (!playerReady || !playerRef.current) return;
     
     try {
       const newTime = value[0];
       playerRef.current.seekTo(newTime, true);
       setCurrentTime(newTime);
-      setIsDragging(false);
-      console.log('Seek committed to:', newTime); // Debug log
     } catch (error) {
-      console.error('Error committing seek:', error);
-      setIsDragging(false);
+      console.error('Error seeking:', error);
     }
   };
 
@@ -442,7 +420,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
             <p className="text-sm text-white/70">
               {!apiReady ? 'Loading API...' : playerReady ? 'Audio Only Mode' : 'Loading Player...'}
             </p>
-            <p className="text-xs text-white/50 mt-2">
+            <p className="text-lg font-mono text-bible-gold mt-2">
               {formatTime(currentTime)} {duration > 0 ? `/ ${formatTime(duration)}` : ''}
             </p>
           </div>
@@ -461,7 +439,6 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               max={duration > 0 ? duration : 100}
               step={1}
               onValueChange={handleSeekChange}
-              onValueCommit={handleSeekCommit}
               className="w-full cursor-pointer"
               disabled={!playerReady || error !== ''}
             />
