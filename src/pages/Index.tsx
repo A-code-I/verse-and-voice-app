@@ -16,7 +16,7 @@ import DailyDevotional from '@/components/DailyDevotional';
 import DevotionalManagement from '@/components/DevotionalManagement';
 import DevotionalCards from '@/components/DevotionalCards';
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Users, BookOpen, Calendar, ChevronDown, ChevronUp, Maximize2, Minimize2 } from "lucide-react";
+import { LogOut, Users, BookOpen, Calendar, ChevronDown, ChevronUp } from "lucide-react";
 import SermonLibrary from '@/components/SermonLibrary';
 
 export interface Sermon {
@@ -579,32 +579,25 @@ const Index = () => {
             <DailyVerse />
             
             <Card className="glass-effect border-white/20 text-white">
-              <CardHeader>
+              <CardHeader 
+                className="cursor-pointer hover:bg-white/10 transition-colors rounded-t-lg"
+                onClick={() => setExpandedDevotionals(!expandedDevotionals)}
+              >
                 <div className="flex justify-between items-center">
                   <CardTitle className="text-2xl font-bible flex items-center gap-2">
                     <BookOpen className="h-6 w-6" />
                     Daily Devotionals
                   </CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setExpandedDevotionals(!expandedDevotionals)}
-                    className="text-white hover:bg-white/20 flex items-center gap-2"
-                  >
+                  <div className="flex items-center gap-2 text-white/60">
+                    <span className="text-sm">
+                      {expandedDevotionals ? 'Click to minimize' : 'Click to expand'}
+                    </span>
                     {expandedDevotionals ? (
-                      <>
-                        <Minimize2 className="h-4 w-4" />
-                        <span className="hidden sm:inline">Minimize</span>
-                        <ChevronUp className="h-4 w-4" />
-                      </>
+                      <ChevronUp className="h-5 w-5" />
                     ) : (
-                      <>
-                        <Maximize2 className="h-4 w-4" />
-                        <span className="hidden sm:inline">Expand</span>
-                        <ChevronDown className="h-4 w-4" />
-                      </>
+                      <ChevronDown className="h-5 w-5" />
                     )}
-                  </Button>
+                  </div>
                 </div>
               </CardHeader>
               {expandedDevotionals && (
@@ -615,32 +608,25 @@ const Index = () => {
             </Card>
 
             <Card className="glass-effect border-white/20 text-white">
-              <CardHeader>
+              <CardHeader 
+                className="cursor-pointer hover:bg-white/10 transition-colors rounded-t-lg"
+                onClick={() => setExpandedSermons(!expandedSermons)}
+              >
                 <div className="flex justify-between items-center">
                   <CardTitle className="text-2xl font-bible flex items-center gap-2">
                     <Calendar className="h-6 w-6" />
                     Latest Bible Sermons
                   </CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setExpandedSermons(!expandedSermons)}
-                    className="text-white hover:bg-white/20 flex items-center gap-2"
-                  >
+                  <div className="flex items-center gap-2 text-white/60">
+                    <span className="text-sm">
+                      {expandedSermons ? 'Click to minimize' : 'Click to expand'}
+                    </span>
                     {expandedSermons ? (
-                      <>
-                        <Minimize2 className="h-4 w-4" />
-                        <span className="hidden sm:inline">Minimize</span>
-                        <ChevronUp className="h-4 w-4" />
-                      </>
+                      <ChevronUp className="h-5 w-5" />
                     ) : (
-                      <>
-                        <Maximize2 className="h-4 w-4" />
-                        <span className="hidden sm:inline">Expand</span>
-                        <ChevronDown className="h-4 w-4" />
-                      </>
+                      <ChevronDown className="h-5 w-5" />
                     )}
-                  </Button>
+                  </div>
                 </div>
               </CardHeader>
               {expandedSermons && (

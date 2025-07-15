@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -93,7 +94,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     loadYouTubeAPI();
   }, []);
 
-  // Enhanced time update function with better error handling
+  // Simplified time update function
   const updateCurrentTime = () => {
     if (!playerRef.current || !playerReady || !mountedRef.current) {
       return;
@@ -102,13 +103,11 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     try {
       const time = playerRef.current.getCurrentTime();
       const dur = playerRef.current.getDuration();
-      const state = playerRef.current.getPlayerState();
       
-      console.log('Time update - Time:', time, 'Duration:', dur, 'State:', state);
+      console.log('Updating time:', time, 'Duration:', dur);
       
-      // Only update if we get valid time values
       if (typeof time === 'number' && !isNaN(time) && time >= 0) {
-        setCurrentTime(time);
+        setCurrentTime(Math.floor(time));
         
         // Save position for resume
         if (videoId && time > 0) {
@@ -116,33 +115,33 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
         }
       }
       
-      // Update duration if valid
       if (typeof dur === 'number' && !isNaN(dur) && dur > 0 && dur !== duration) {
-        setDuration(dur);
+        setDuration(Math.floor(dur));
       }
     } catch (error) {
       console.warn('Error in updateCurrentTime:', error);
     }
   };
 
-  // More aggressive time tracking
+  // Start continuous time updates
   const startTimeUpdates = () => {
-    console.log('Starting aggressive time updates');
+    console.log('Starting time tracking');
     
     if (timeUpdateIntervalRef.current) {
       clearInterval(timeUpdateIntervalRef.current);
     }
 
-    // Update immediately and more frequently
+    // Immediate update
     updateCurrentTime();
     
+    // Continuous updates every second
     timeUpdateIntervalRef.current = setInterval(() => {
       updateCurrentTime();
-    }, 500); // Update every 500ms for smoother tracking
+    }, 1000);
   };
 
   const stopTimeUpdates = () => {
-    console.log('Stopping time updates');
+    console.log('Stopping time tracking');
     if (timeUpdateIntervalRef.current) {
       clearInterval(timeUpdateIntervalRef.current);
       timeUpdateIntervalRef.current = null;
@@ -203,7 +202,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
             onReady: (event: any) => {
               if (!mountedRef.current) return;
               
-              console.log('YouTube player ready event fired');
+              console.log('YouTube player ready');
               setPlayerReady(true);
               setLoading(false);
               setError('');
@@ -216,9 +215,9 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               }
               
               const videoDuration = event.target.getDuration();
-              console.log('Video duration loaded:', videoDuration);
+              console.log('Video duration:', videoDuration);
               if (videoDuration > 0) {
-                setDuration(videoDuration);
+                setDuration(Math.floor(videoDuration));
               }
               
               // Load saved position
@@ -231,7 +230,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
                     if (mountedRef.current && playerRef.current) {
                       try {
                         event.target.seekTo(position, true);
-                        setCurrentTime(position);
+                        setCurrentTime(Math.floor(position));
                       } catch (e) {
                         console.warn('Error seeking to saved position:', e);
                       }
@@ -239,13 +238,6 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
                   }, 500);
                 }
               }
-
-              // Start time tracking immediately when ready
-              setTimeout(() => {
-                if (mountedRef.current) {
-                  startTimeUpdates();
-                }
-              }, 1000);
             },
             onStateChange: (event: any) => {
               if (!mountedRef.current) return;
@@ -253,25 +245,24 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               const state = event.data;
               const playing = state === 1; // 1 = playing
               
-              console.log('Player state changed to:', state, playing ? 'PLAYING' : 'NOT_PLAYING');
+              console.log('Player state changed:', state, playing ? 'PLAYING' : 'NOT_PLAYING');
               setIsPlaying(playing);
               setLoading(state === 3); // 3 = buffering
               
               if (playing) {
-                console.log('Player is playing, starting intensive time updates');
+                console.log('Started playing - beginning time tracking');
                 startTimeUpdates();
               } else {
-                console.log('Player stopped/paused');
-                // Don't stop updates completely, just reduce frequency for paused state
+                console.log('Stopped playing - stopping time tracking');
+                stopTimeUpdates();
+                // Update once more when paused to get final position
                 if (state === 2) { // 2 = paused
-                  stopTimeUpdates();
-                  // Update once more when paused
                   setTimeout(() => updateCurrentTime(), 100);
                 }
               }
               
               if (state === 0) { // ended
-                console.log('Video ended, resetting');
+                console.log('Video ended');
                 setCurrentTime(0);
                 setIsPlaying(false);
                 stopTimeUpdates();
@@ -335,8 +326,6 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       } else {
         console.log('Playing video');
         playerRef.current.playVideo();
-        // Force start time updates when playing
-        setTimeout(() => startTimeUpdates(), 500);
       }
     } catch (error) {
       console.error('Error toggling play/pause:', error);
@@ -407,7 +396,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     const newVolume = value[0];
     setVolume(newVolume);
     
-    // Only set volume if player is ready, don't recreate player
+    // Only set volume if player is ready - don't trigger player recreation
     if (playerRef.current && playerReady) {
       try {
         console.log('Setting volume to:', newVolume);
