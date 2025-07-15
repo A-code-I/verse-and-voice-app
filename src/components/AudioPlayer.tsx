@@ -93,7 +93,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     loadYouTubeAPI();
   }, []);
 
-  // Simplified time update function
+  // Enhanced time update function with better error handling
   const updateCurrentTime = () => {
     if (!playerRef.current || !playerReady || !mountedRef.current) {
       return;
@@ -102,18 +102,22 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     try {
       const time = playerRef.current.getCurrentTime();
       const dur = playerRef.current.getDuration();
+      const state = playerRef.current.getPlayerState();
       
-      console.log('Time update:', { time, duration: dur, playerState: playerRef.current.getPlayerState() });
+      console.log('Time update - Time:', time, 'Duration:', dur, 'State:', state);
       
-      if (typeof time === 'number' && time >= 0 && !isNaN(time)) {
+      // Only update if we get valid time values
+      if (typeof time === 'number' && !isNaN(time) && time >= 0) {
         setCurrentTime(time);
         
+        // Save position for resume
         if (videoId && time > 0) {
           localStorage.setItem(`sermon-position-${videoId}`, time.toString());
         }
       }
       
-      if (typeof dur === 'number' && dur > 0 && !isNaN(dur) && dur !== duration) {
+      // Update duration if valid
+      if (typeof dur === 'number' && !isNaN(dur) && dur > 0 && dur !== duration) {
         setDuration(dur);
       }
     } catch (error) {
@@ -121,21 +125,20 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     }
   };
 
-  // Start time updates
+  // More aggressive time tracking
   const startTimeUpdates = () => {
-    console.log('Starting time updates');
+    console.log('Starting aggressive time updates');
     
     if (timeUpdateIntervalRef.current) {
       clearInterval(timeUpdateIntervalRef.current);
     }
 
-    // Update immediately
+    // Update immediately and more frequently
     updateCurrentTime();
-
-    // Set up interval for continuous updates
+    
     timeUpdateIntervalRef.current = setInterval(() => {
       updateCurrentTime();
-    }, 1000); // Update every second
+    }, 500); // Update every 500ms for smoother tracking
   };
 
   const stopTimeUpdates = () => {
@@ -146,7 +149,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     }
   };
 
-  // Initialize YouTube player - REMOVED volume from dependencies
+  // Initialize YouTube player
   useEffect(() => {
     if (!videoId || !apiReady || !mountedRef.current) return;
 
@@ -206,7 +209,11 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               setError('');
               
               // Set initial volume
-              event.target.setVolume(volume);
+              try {
+                event.target.setVolume(volume);
+              } catch (e) {
+                console.warn('Error setting initial volume:', e);
+              }
               
               const videoDuration = event.target.getDuration();
               console.log('Video duration loaded:', videoDuration);
@@ -222,12 +229,23 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
                 if (position > 0 && position < videoDuration) {
                   setTimeout(() => {
                     if (mountedRef.current && playerRef.current) {
-                      event.target.seekTo(position, true);
-                      setCurrentTime(position);
+                      try {
+                        event.target.seekTo(position, true);
+                        setCurrentTime(position);
+                      } catch (e) {
+                        console.warn('Error seeking to saved position:', e);
+                      }
                     }
                   }, 500);
                 }
               }
+
+              // Start time tracking immediately when ready
+              setTimeout(() => {
+                if (mountedRef.current) {
+                  startTimeUpdates();
+                }
+              }, 1000);
             },
             onStateChange: (event: any) => {
               if (!mountedRef.current) return;
@@ -240,13 +258,14 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
               setLoading(state === 3); // 3 = buffering
               
               if (playing) {
-                console.log('Player is playing, starting time updates');
+                console.log('Player is playing, starting intensive time updates');
                 startTimeUpdates();
               } else {
-                console.log('Player stopped/paused, stopping time updates');
-                stopTimeUpdates();
-                // Update time one final time when paused
+                console.log('Player stopped/paused');
+                // Don't stop updates completely, just reduce frequency for paused state
                 if (state === 2) { // 2 = paused
+                  stopTimeUpdates();
+                  // Update once more when paused
                   setTimeout(() => updateCurrentTime(), 100);
                 }
               }
@@ -255,6 +274,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
                 console.log('Video ended, resetting');
                 setCurrentTime(0);
                 setIsPlaying(false);
+                stopTimeUpdates();
                 if (videoId) {
                   localStorage.removeItem(`sermon-position-${videoId}`);
                 }
@@ -290,7 +310,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
         }
       }
     };
-  }, [videoId, apiReady, sermon.id]); // REMOVED volume from dependencies
+  }, [videoId, apiReady, sermon.id]);
 
   // Component unmount cleanup
   useEffect(() => {
@@ -315,6 +335,8 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       } else {
         console.log('Playing video');
         playerRef.current.playVideo();
+        // Force start time updates when playing
+        setTimeout(() => startTimeUpdates(), 500);
       }
     } catch (error) {
       console.error('Error toggling play/pause:', error);
@@ -381,7 +403,6 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
     }
   };
 
-  // Handle volume change WITHOUT recreating player
   const handleVolumeChange = (value: number[]) => {
     const newVolume = value[0];
     setVolume(newVolume);
