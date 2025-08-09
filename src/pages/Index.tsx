@@ -67,20 +67,8 @@ const Index = () => {
   const [authError, setAuthError] = useState<string>('');
   const [expandedSermons, setExpandedSermons] = useState(false);
   const [expandedDevotionals, setExpandedDevotionals] = useState(false);
+  const [categories, setCategories] = useState<string[]>([]);
   const { toast } = useToast();
-
-  const categories = [
-    'Sunday Service',
-    'Wednesday Service', 
-    'Saturday Service',
-    'Revival Meeting',
-    'Anniversary',
-    'Special Sunday School',
-    'Youth Meeting',
-    'Testimonies',
-    'Special Meeting',
-    'Topic Wise'
-  ];
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -222,10 +210,26 @@ const Index = () => {
     }
   };
 
+  const fetchCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('sermon_categories')
+        .select('name')
+        .order('name');
+
+      if (error) throw error;
+      const categoryNames = data?.map(cat => cat.name) || [];
+      setCategories(categoryNames);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
+
   useEffect(() => {
     if (userProfile?.has_access) {
       fetchSermons();
       fetchDevotionals();
+      fetchCategories();
     }
   }, [userProfile, user]);
 
