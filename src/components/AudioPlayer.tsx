@@ -335,38 +335,26 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       if (!playerRef.current || !playerReady) return;
 
       if (document.hidden) {
-        // Tab is now hidden - store current playing state
-        wasPlayingBeforeHidden.current = isPlaying;
-        console.log('Tab hidden, was playing:', isPlaying);
-        
-        // Don't pause the video - let it continue playing
-        // The browser should handle background audio properly
+        // Tab is now hidden - just log, don't interfere with playback
+        console.log('Tab hidden, continuing playback in background');
         
       } else {
-        // Tab is now visible
-        console.log('Tab visible, was playing before hidden:', wasPlayingBeforeHidden.current);
+        // Tab is now visible - sync UI with actual player state
+        console.log('Tab visible, syncing UI with player state');
         
-        // Check actual player state in case browser paused it
         setTimeout(() => {
           try {
             const playerState = playerRef.current.getPlayerState();
             const actualTime = playerRef.current.getCurrentTime();
             
-            console.log('Player state on tab visible:', playerState, 'time:', actualTime);
-            
             // Update UI to match actual player state
             if (playerState === 1) { // Playing
               setIsPlaying(true);
-              startTimeUpdates();
+              if (!intervalRef.current) {
+                startTimeUpdates();
+              }
             } else if (playerState === 2) { // Paused
               setIsPlaying(false);
-              stopTimeUpdates();
-              
-              // If it was playing before and browser paused it, resume
-              if (wasPlayingBeforeHidden.current) {
-                console.log('Resuming playback after tab became visible');
-                playerRef.current.playVideo();
-              }
             }
             
             // Update current time
@@ -375,22 +363,23 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
             }
             
           } catch (e) {
-            console.warn('Error checking player state on visibility change:', e);
+            console.warn('Error syncing player state:', e);
           }
         }, 100);
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [playerReady]);
 
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [playerReady, isPlaying]);
-
-  // Enhanced time updates that work better in background
+  // Continuous time updates that work in background
   useEffect(() => {
     if (!isPlaying || !playerRef.current || !playerReady) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
       return;
     }
 
@@ -416,26 +405,14 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       }
     };
 
-    // Use requestAnimationFrame for more reliable updates
-    let animationFrame: number;
-    
-    const scheduleUpdate = () => {
-      animationFrame = requestAnimationFrame(() => {
-        updateTime();
-        if (isPlaying && !document.hidden) {
-          scheduleUpdate();
-        } else if (isPlaying && document.hidden) {
-          // In background, use interval instead
-          setTimeout(scheduleUpdate, 1000);
-        }
-      });
-    };
-
-    scheduleUpdate();
+    // Use interval that continues regardless of tab visibility
+    intervalRef.current = setInterval(updateTime, 1000);
+    updateTime(); // Immediate update
 
     return () => {
-      if (animationFrame) {
-        cancelAnimationFrame(animationFrame);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     };
   }, [isPlaying, playerReady, duration]);
