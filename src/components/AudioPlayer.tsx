@@ -24,6 +24,7 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
   const playerRef = useRef<any>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isSeekingRef = useRef(false);
+  const wasPlayingBeforeHidden = useRef(false);
 
   const getYouTubeVideoId = (url: string): string | null => {
     if (!url || typeof url !== 'string') return null;
@@ -271,6 +272,173 @@ const AudioPlayer = ({ sermon, onLike }: AudioPlayerProps) => {
       }
     };
   }, []);
+
+  // Setup Media Session API for background playback
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || !sermon) return;
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: sermon.title,
+      artist: `${sermon.category} - ${new Date(sermon.sermon_date).toLocaleDateString()}`,
+      artwork: [
+        { src: '/favicon.ico', sizes: '96x96', type: 'image/png' },
+      ],
+    });
+
+    navigator.mediaSession.setActionHandler('play', () => {
+      if (playerRef.current && !isPlaying) {
+        playerRef.current.playVideo();
+      }
+    });
+
+    navigator.mediaSession.setActionHandler('pause', () => {
+      if (playerRef.current && isPlaying) {
+        playerRef.current.pauseVideo();
+      }
+    });
+
+    navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+      const skipTime = details.seekOffset || 10;
+      if (playerRef.current) {
+        const newTime = Math.max(0, currentTime - skipTime);
+        playerRef.current.seekTo(newTime, true);
+        setCurrentTime(newTime);
+      }
+    });
+
+    navigator.mediaSession.setActionHandler('seekforward', (details) => {
+      const skipTime = details.seekOffset || 10;
+      if (playerRef.current) {
+        const newTime = Math.min(duration, currentTime + skipTime);
+        playerRef.current.seekTo(newTime, true);
+        setCurrentTime(newTime);
+      }
+    });
+
+    // Update playback state
+    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+
+    // Update position state
+    if (duration > 0) {
+      navigator.mediaSession.setPositionState({
+        duration: duration,
+        playbackRate: 1,
+        position: currentTime,
+      });
+    }
+
+  }, [sermon, isPlaying, currentTime, duration]);
+
+  // Handle tab visibility changes for background playback
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!playerRef.current || !playerReady) return;
+
+      if (document.hidden) {
+        // Tab is now hidden - store current playing state
+        wasPlayingBeforeHidden.current = isPlaying;
+        console.log('Tab hidden, was playing:', isPlaying);
+        
+        // Don't pause the video - let it continue playing
+        // The browser should handle background audio properly
+        
+      } else {
+        // Tab is now visible
+        console.log('Tab visible, was playing before hidden:', wasPlayingBeforeHidden.current);
+        
+        // Check actual player state in case browser paused it
+        setTimeout(() => {
+          try {
+            const playerState = playerRef.current.getPlayerState();
+            const actualTime = playerRef.current.getCurrentTime();
+            
+            console.log('Player state on tab visible:', playerState, 'time:', actualTime);
+            
+            // Update UI to match actual player state
+            if (playerState === 1) { // Playing
+              setIsPlaying(true);
+              startTimeUpdates();
+            } else if (playerState === 2) { // Paused
+              setIsPlaying(false);
+              stopTimeUpdates();
+              
+              // If it was playing before and browser paused it, resume
+              if (wasPlayingBeforeHidden.current) {
+                console.log('Resuming playback after tab became visible');
+                playerRef.current.playVideo();
+              }
+            }
+            
+            // Update current time
+            if (typeof actualTime === 'number' && !isNaN(actualTime)) {
+              setCurrentTime(Math.floor(actualTime));
+            }
+            
+          } catch (e) {
+            console.warn('Error checking player state on visibility change:', e);
+          }
+        }, 100);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [playerReady, isPlaying]);
+
+  // Enhanced time updates that work better in background
+  useEffect(() => {
+    if (!isPlaying || !playerRef.current || !playerReady) {
+      return;
+    }
+
+    const updateTime = () => {
+      try {
+        const time = playerRef.current.getCurrentTime();
+        if (typeof time === 'number' && !isNaN(time) && !isSeekingRef.current) {
+          const flooredTime = Math.floor(time);
+          setCurrentTime(flooredTime);
+          savePosition(time);
+          
+          // Update media session position
+          if ('mediaSession' in navigator && duration > 0) {
+            navigator.mediaSession.setPositionState({
+              duration: duration,
+              playbackRate: 1,
+              position: flooredTime,
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Time update failed:', e);
+      }
+    };
+
+    // Use requestAnimationFrame for more reliable updates
+    let animationFrame: number;
+    
+    const scheduleUpdate = () => {
+      animationFrame = requestAnimationFrame(() => {
+        updateTime();
+        if (isPlaying && !document.hidden) {
+          scheduleUpdate();
+        } else if (isPlaying && document.hidden) {
+          // In background, use interval instead
+          setTimeout(scheduleUpdate, 1000);
+        }
+      });
+    };
+
+    scheduleUpdate();
+
+    return () => {
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+      }
+    };
+  }, [isPlaying, playerReady, duration]);
 
   const togglePlayPause = () => {
     if (!playerRef.current || loading) return;
